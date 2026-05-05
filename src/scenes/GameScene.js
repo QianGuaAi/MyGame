@@ -1,0 +1,1976 @@
+import Phaser from "phaser";
+import { EASTER_EGGS } from "../data/easterEggs.js";
+import { BASIC_SHOP_ITEMS, EQUIPMENT_CATALOG, RARITY_CONFIG } from "../data/equipment.js";
+import { HERO_DEFS } from "../data/heroes.js";
+import {
+  DECORATIONS,
+  GAME_HEIGHT,
+  GAME_WIDTH,
+  PANEL_X,
+  PATH_LENGTH,
+  PATH_POINTS,
+  PATH_SEGMENTS,
+  TEXT_STYLE,
+  TOTAL_WAVES,
+  TOWER_SLOTS,
+  pointOnPath,
+} from "../data/map.js";
+import { SPECIAL_TOWER_KEYS, TOWER_BUTTON_ORDER, TOWER_TYPES } from "../data/towers.js";
+import { createGameTextures } from "../render/textures.js";
+import { cloneStats, pickRandom } from "../utils/random.js";
+
+export class GameScene extends Phaser.Scene {
+  constructor() {
+    super("GameScene");
+  }
+
+  init() {
+    this.gold = 160;
+    this.lives = 20;
+    this.wave = 0;
+    this.score = 0;
+    this.bestWave = Number(localStorage.getItem("crown-outpost-best-wave") || 0);
+    this.enemies = [];
+    this.towers = [];
+    this.projectiles = [];
+    this.heroEffects = [];
+    this.inventory = [];
+    this.unlockedBlueprints = new Set();
+    this.blueprintFragments = 0;
+    this.selectedBuildType = "arrow";
+    this.selectedTower = null;
+    this.selectedShopHeroId = "tiezhu";
+    this.waveActive = false;
+    this.gameEnded = false;
+    this.modalOpen = false;
+    this.modalObjects = [];
+    this.currentMerchant = null;
+    this.spawnedThisWave = 0;
+    this.enemiesThisWave = 0;
+    this.defeatedWaves = 0;
+    this.nextSpawnAt = 0;
+    this.spawnEvery = 820;
+    this.claimedEasterEggs = new Set(JSON.parse(localStorage.getItem("crown-outpost-easter-eggs") || "[]"));
+    this.createHeroState();
+  }
+
+  create() {
+    this.createTextures();
+    this.createMap();
+    this.createEasterEggs();
+    this.createSlots();
+    this.createHeroes();
+    this.createUi();
+    this.updateUi();
+  }
+
+  update(time, delta) {
+    if (this.gameEnded || this.modalOpen) {
+      return;
+    }
+
+    this.updateSpawning(time);
+    this.updateEnemies(time, delta);
+    this.updateTowers(time);
+    this.updateProjectiles(delta);
+    this.updateHeroes(time, delta);
+    this.updateHeroEffects(delta);
+    this.checkWaveComplete();
+  }
+
+  createHeroState() {
+    this.heroes = HERO_DEFS.map((def) => {
+      const hero = {
+        ...def,
+        homeX: def.x,
+        homeY: def.y,
+        x: def.x,
+        y: def.y,
+        hp: def.maxHp,
+        equipment: { weapon: null, armor: null, offhand: null },
+        nextAttackAt: 0,
+        nextHealAt: 0,
+        dead: false,
+      };
+
+      this.recalculateHeroStats(hero);
+      hero.hp = hero.stats.maxHp;
+      return hero;
+    });
+  }
+
+  createTextures() {
+    createGameTextures(this);
+  }
+
+  createMap() {
+    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x87b866).setOrigin(0);
+    this.add.rectangle(0, 0, PANEL_X, GAME_HEIGHT, 0x9bcf73, 0.62).setOrigin(0);
+    this.add.grid(PANEL_X / 2, GAME_HEIGHT / 2, PANEL_X, GAME_HEIGHT, 48, 48, 0x000000, 0, 0x6a9f4b, 0.16);
+
+    this.drawTerrainPatches();
+    this.drawPath();
+    this.drawBaseAndEntry();
+    this.placeDecorations();
+
+    this.add.rectangle(PANEL_X + 101, GAME_HEIGHT / 2, 202, GAME_HEIGHT, 0xead39a, 1);
+    this.add.rectangle(PANEL_X + 101, GAME_HEIGHT / 2, 184, GAME_HEIGHT - 22, 0xf6e2a9, 1)
+      .setStrokeStyle(4, 0x7a4b25, 1);
+    this.add.rectangle(PANEL_X, GAME_HEIGHT / 2, 4, GAME_HEIGHT, 0x5d3c20, 0.9);
+  }
+
+  drawTerrainPatches() {
+    const graphics = this.add.graphics();
+
+    graphics.fillStyle(0x7eb45d, 0.32);
+    [
+      [70, 78, 124, 54],
+      [610, 78, 164, 56],
+      [202, 492, 170, 52],
+      [592, 498, 142, 46],
+      [420, 64, 112, 36],
+    ].forEach(([x, y, width, height]) => graphics.fillEllipse(x, y, width, height));
+
+    graphics.fillStyle(0x6fa855, 0.24);
+    for (let i = 0; i < 44; i += 1) {
+      graphics.fillEllipse(Phaser.Math.Between(16, PANEL_X - 28), Phaser.Math.Between(24, GAME_HEIGHT - 20), 16, 6);
+    }
+  }
+
+  drawPath() {
+    const graphics = this.add.graphics();
+
+    this.strokePath(graphics, 70, 0x4c3720, 0.45);
+    this.strokePath(graphics, 56, 0x8a6230, 1);
+    this.strokePath(graphics, 44, 0xc9964b, 1);
+    this.strokePath(graphics, 4, 0xf6cf74, 0.65);
+
+    graphics.fillStyle(0xe6b660, 0.95);
+    PATH_POINTS.forEach(([x, y]) => graphics.fillCircle(x, y, 20));
+
+    graphics.fillStyle(0x7a5328, 0.28);
+    PATH_SEGMENTS.forEach((segment) => {
+      const count = Math.max(2, Math.floor(segment.length / 70));
+
+      for (let i = 0; i < count; i += 1) {
+        const t = (i + 0.45) / count;
+        const x = Phaser.Math.Linear(segment.from.x, segment.to.x, t);
+        const y = Phaser.Math.Linear(segment.from.y, segment.to.y, t);
+        graphics.fillEllipse(x, y, 18, 7);
+      }
+    });
+  }
+
+  strokePath(graphics, width, color, alpha) {
+    graphics.lineStyle(width, color, alpha);
+    graphics.beginPath();
+    graphics.moveTo(PATH_POINTS[0][0], PATH_POINTS[0][1]);
+    PATH_POINTS.slice(1).forEach(([x, y]) => graphics.lineTo(x, y));
+    graphics.strokePath();
+    graphics.fillStyle(color, alpha);
+    PATH_POINTS.forEach(([x, y]) => graphics.fillCircle(x, y, width / 2));
+  }
+
+  drawBaseAndEntry() {
+    this.add.circle(22, 338, 26, 0xf4c542, 1).setStrokeStyle(4, 0x7a4b25, 0.82);
+    this.add.rectangle(740, 378, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1);
+    this.add.rectangle(740, 352, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1);
+    this.add.rectangle(740, 386, 18, 50, 0x4f2f18, 1);
+    this.add.circle(736, 404, 2, 0xf6d37a, 1);
+    this.add.text(710, 326, "前哨", {
+      ...TEXT_STYLE,
+      fontSize: "16px",
+      color: "#4b2c13",
+    }).setDepth(3);
+  }
+
+  placeDecorations() {
+    DECORATIONS.forEach(([texture, x, y, scale]) => {
+      this.add.image(x, y, texture).setScale(scale).setDepth(y < 150 ? 1 : 2).setAlpha(0.96);
+    });
+  }
+
+  createEasterEggs() {
+    this.easterEggObjects = [];
+
+    EASTER_EGGS.forEach((egg) => {
+      if (this.claimedEasterEggs.has(egg.id)) {
+        return;
+      }
+
+      const marker = this.add.circle(egg.x, egg.y, 8, egg.fragment ? 0xdedcff : 0xf6c453, 0.9)
+        .setStrokeStyle(2, 0x6b4a22, 0.8)
+        .setDepth(8)
+        .setInteractive({ useHandCursor: true });
+      const sparkle = this.add.star(egg.x + 10, egg.y - 9, 5, 3, 6, 0xfff3bd, 0.85)
+        .setDepth(8)
+        .setInteractive({ useHandCursor: true });
+      const claim = () => this.claimEasterEgg(egg, [marker, sparkle]);
+
+      marker.on("pointerdown", claim);
+      sparkle.on("pointerdown", claim);
+      this.tweens.add({
+        targets: sparkle,
+        angle: 360,
+        duration: 1800,
+        repeat: -1,
+      });
+      this.easterEggObjects.push(marker, sparkle);
+    });
+  }
+
+  claimEasterEgg(egg, objects) {
+    if (this.claimedEasterEggs.has(egg.id)) {
+      return;
+    }
+
+    this.claimedEasterEggs.add(egg.id);
+    localStorage.setItem("crown-outpost-easter-eggs", JSON.stringify([...this.claimedEasterEggs]));
+    objects.forEach((item) => item.destroy());
+
+    if (egg.fragment) {
+      this.addBlueprintFragment();
+      this.showNotice(`${egg.label}：图纸碎片 +1`, "#5a4ba6");
+    } else {
+      this.gold += egg.reward;
+      this.showNotice(`${egg.label}：金币 +${egg.reward}`, "#315c22");
+    }
+
+    this.updateUi();
+  }
+
+  createSlots() {
+    this.slots = TOWER_SLOTS.map(([x, y], index) => {
+      const platform = this.add.circle(x, y, 25, 0xb9b19c, 1)
+        .setStrokeStyle(4, 0x6a5a46, 1)
+        .setDepth(5)
+        .setInteractive({ useHandCursor: true });
+      const inner = this.add.circle(x, y, 17, 0x786b56, 0.58)
+        .setStrokeStyle(2, 0xe6d7b3, 0.55)
+        .setDepth(6)
+        .setInteractive({ useHandCursor: true });
+      const plus = this.add.text(x, y - 1, "+", {
+        fontFamily: "Inter, system-ui, sans-serif",
+        fontSize: "25px",
+        color: "#f8edc7",
+      }).setOrigin(0.5).setDepth(7).setInteractive({ useHandCursor: true });
+      const slot = { index, x, y, platform, inner, plus, tower: null };
+      const click = () => this.handleSlotClick(slot);
+
+      [platform, inner, plus].forEach((item) => {
+        item.on("pointerover", () => this.previewBuildRange(slot));
+        item.on("pointerout", () => this.clearHoverRange(slot));
+        item.on("pointerdown", click);
+      });
+
+      return slot;
+    });
+  }
+
+  createHeroes() {
+    this.heroes.forEach((hero) => {
+      const shadow = this.add.ellipse(0, 16, 34, 10, 0x2f2415, 0.24);
+      const body = this.add.circle(0, 0, 16, hero.color, 1).setStrokeStyle(3, 0x2c2118, 0.8);
+      const head = this.add.circle(0, -17, 8, 0xf1c27d, 1).setStrokeStyle(2, 0x664221, 0.78);
+      const accent = this.add.rectangle(-10, 1, 7, 17, hero.accent, 1);
+      const name = this.add.text(0, 25, hero.name, {
+        fontFamily: "Inter, system-ui, sans-serif",
+        fontSize: "12px",
+        color: "#2b1c10",
+        backgroundColor: "rgba(246,226,169,0.75)",
+        padding: { x: 3, y: 1 },
+      }).setOrigin(0.5);
+      const hpBack = this.add.rectangle(-22, -31, 44, 5, 0x3b2415, 0.9).setOrigin(0, 0.5);
+      const hpFill = this.add.rectangle(-22, -31, 44, 5, 0x4cbe58, 1).setOrigin(0, 0.5);
+      const group = this.add.container(hero.x, hero.y, [shadow, body, head, accent, hpBack, hpFill, name])
+        .setDepth(16)
+        .setInteractive(new Phaser.Geom.Circle(0, 0, 28), Phaser.Geom.Circle.Contains);
+
+      group.on("pointerdown", () => {
+        this.selectedShopHeroId = hero.id;
+        this.showNotice(`${hero.name}：${hero.title}`, "#2f4972");
+        this.updateUi();
+      });
+
+      hero.group = group;
+      hero.hpFill = hpFill;
+      hero.nameLabel = name;
+      this.updateHeroSprite(hero);
+    });
+  }
+
+  createUi() {
+    this.hudBox = this.add.rectangle(20, 14, 714, 42, 0xf6e2a9, 0.93)
+      .setOrigin(0)
+      .setStrokeStyle(3, 0x7a4b25, 0.92)
+      .setDepth(30);
+    this.hudText = this.add.text(34, 24, "", {
+      ...TEXT_STYLE,
+      fontSize: "13px",
+      color: "#352415",
+      lineSpacing: 2,
+    }).setDepth(31);
+
+    this.noticeText = this.add.text(PANEL_X / 2, 516, "", {
+      ...TEXT_STYLE,
+      fontSize: "18px",
+      color: "#6d2e18",
+      align: "center",
+    }).setOrigin(0.5).setDepth(30).setAlpha(0);
+
+    this.add.text(PANEL_X + 24, 24, "王冠前哨", {
+      ...TEXT_STYLE,
+      fontSize: "24px",
+      color: "#4a2d17",
+    }).setDepth(30);
+
+    this.startButton = this.createButton(PANEL_X + 101, 70, 154, 34, "", () => this.startWave(), {
+      fill: 0xc64c35,
+      stroke: 0x74301f,
+      color: "#fff6d8",
+      hoverFill: 0xd95f42,
+    });
+
+    this.equipmentButton = this.createButton(PANEL_X + 62, 112, 74, 30, "装备", () => this.openEquipmentShop(), {
+      fill: 0x6f8dbd,
+      stroke: 0x2d4978,
+      color: "#fff6d8",
+      hoverFill: 0x7fa0d2,
+    });
+
+    this.inventoryButton = this.createButton(PANEL_X + 140, 112, 74, 30, "背包", () => this.openInventory(), {
+      fill: 0x8fb76b,
+      stroke: 0x4c7135,
+      color: "#183111",
+      hoverFill: 0xa0c77e,
+    });
+
+    this.add.text(PANEL_X + 24, 136, "建造", {
+      ...TEXT_STYLE,
+      fontSize: "15px",
+      color: "#70451f",
+    }).setDepth(30);
+
+    this.towerButtons = TOWER_BUTTON_ORDER.map((key, index) => {
+      const tower = TOWER_TYPES[key];
+      const y = 164 + index * 34;
+      const button = this.createButton(PANEL_X + 101, y, 154, 28, `${tower.name}  ${tower.price}`, () => this.selectBuildType(key), {
+        fill: 0xe7c980,
+        stroke: 0x8a5a26,
+        color: "#3a2816",
+        hoverFill: 0xf0d894,
+      });
+      const icon = this.add.circle(PANEL_X + 36, y, 7, tower.color, 1)
+        .setStrokeStyle(2, 0x5c3218, 0.68)
+        .setDepth(32);
+
+      return { key, button, icon };
+    });
+
+    this.selectionText = this.add.text(PANEL_X + 25, 402, "", {
+      ...TEXT_STYLE,
+      fontSize: "13px",
+      color: "#3c2814",
+      lineSpacing: 2,
+      wordWrap: { width: 154, useAdvancedWrap: true },
+    }).setDepth(30);
+
+    this.upgradeButton = this.createButton(PANEL_X + 101, 466, 154, 34, "", () => this.upgradeSelectedTower(), {
+      fill: 0xf5b83c,
+      stroke: 0x89501f,
+      color: "#3b250f",
+      hoverFill: 0xffca55,
+    });
+
+    this.sellButton = this.createButton(PANEL_X + 101, 506, 154, 30, "", () => this.sellSelectedTower(), {
+      fill: 0x8fb76b,
+      stroke: 0x4c7135,
+      color: "#183111",
+      hoverFill: 0xa0c77e,
+    });
+
+    this.endOverlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x20150d, 0.62)
+      .setDepth(80)
+      .setVisible(false);
+    this.centerText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, "", {
+      fontFamily: "Inter, system-ui, sans-serif",
+      fontSize: "36px",
+      color: "#fff6d8",
+      align: "center",
+      lineSpacing: 8,
+    }).setOrigin(0.5).setDepth(81).setVisible(false);
+    this.restartButton = this.createButton(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 72, 154, 42, "重新开始", () => this.scene.restart(), {
+      fill: 0xf5b83c,
+      stroke: 0x89501f,
+      color: "#3b250f",
+      hoverFill: 0xffca55,
+    });
+    this.restartButton.setDepth(82).setVisible(false);
+  }
+
+  createButton(x, y, width, height, label, onClick, options = {}) {
+    const fill = options.fill ?? 0xe7c980;
+    const hoverFill = options.hoverFill ?? 0xf0d894;
+    const stroke = options.stroke ?? 0x8a5a26;
+    const color = options.color ?? "#3a2816";
+    const bg = this.add.rectangle(0, 0, width, height, fill, 1)
+      .setStrokeStyle(3, stroke, 1)
+      .setDepth(30);
+    const highlight = this.add.rectangle(0, -height / 2 + 5, width - 12, 4, 0xfff1bb, 0.35)
+      .setDepth(31);
+    const text = this.add.text(0, 0, label, {
+      fontFamily: "Inter, system-ui, sans-serif",
+      fontSize: height <= 30 ? "13px" : "15px",
+      color,
+      align: "center",
+    }).setOrigin(0.5).setDepth(32);
+    const button = this.add.container(x, y, [bg, highlight, text]).setDepth(30);
+
+    button.setSize(width, height);
+    button.setInteractive(new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), Phaser.Geom.Rectangle.Contains);
+    button.bg = bg;
+    button.label = text;
+    button.defaultFill = fill;
+    button.hoverFill = hoverFill;
+    button.enabled = true;
+    button.on("pointerover", () => {
+      if (button.enabled) {
+        bg.setFillStyle(hoverFill, 1);
+      }
+    });
+    button.on("pointerout", () => {
+      bg.setFillStyle(button.selected ? 0xf5b83c : fill, 1);
+    });
+    button.on("pointerdown", () => {
+      if (button.enabled) {
+        onClick();
+      }
+    });
+
+    return button;
+  }
+
+  setButtonEnabled(button, enabled) {
+    button.enabled = enabled;
+    button.setAlpha(enabled ? 1 : 0.48);
+    if (!enabled) {
+      button.bg.setFillStyle(button.defaultFill, 1);
+    }
+  }
+
+  setButtonLabel(button, label) {
+    button.label.setText(label);
+  }
+
+  selectBuildType(key) {
+    if (!this.isTowerUnlocked(key)) {
+      this.showNotice(`${TOWER_TYPES[key].name} 需要图纸`, "#9c2b24");
+      return;
+    }
+
+    this.selectedBuildType = key;
+    this.selectedTower = null;
+    this.clearSelectedRange();
+    this.updateUi();
+  }
+
+  handleSlotClick(slot) {
+    if (this.gameEnded || this.modalOpen) {
+      return;
+    }
+
+    if (slot.tower) {
+      this.selectTower(slot.tower);
+      return;
+    }
+
+    this.buildTower(slot, this.selectedBuildType);
+  }
+
+  buildTower(slot, typeKey) {
+    const type = TOWER_TYPES[typeKey];
+
+    if (!this.isTowerUnlocked(typeKey)) {
+      this.showNotice(`${type.name} 需要特殊塔图纸`, "#9c2b24");
+      return;
+    }
+
+    if (this.gold < type.price) {
+      this.showNotice("金币不足", "#9c2b24");
+      this.cameras.main.shake(120, 0.004);
+      return;
+    }
+
+    this.gold -= type.price;
+    const shadow = this.add.ellipse(slot.x, slot.y + 19, 48, 14, 0x2f2415, 0.22).setDepth(7);
+    const sprite = this.add.image(slot.x, slot.y - 12, type.texture).setDepth(9).setInteractive({ useHandCursor: true });
+    const levelText = this.add.text(slot.x + 22, slot.y + 20, "I", {
+      fontFamily: "Inter, system-ui, sans-serif",
+      fontSize: "13px",
+      color: "#fff6d8",
+      backgroundColor: "#6e3e1e",
+      padding: { x: 4, y: 1 },
+    }).setOrigin(0.5).setDepth(11);
+    const tower = {
+      slot,
+      typeKey,
+      level: 1,
+      branch: null,
+      x: slot.x,
+      y: slot.y,
+      shadow,
+      sprite,
+      levelText,
+      guards: [],
+      totalCost: type.price,
+      nextFireAt: 0,
+      ...this.getTowerStats(typeKey, 1, null),
+    };
+
+    if (typeKey === "barracks") {
+      tower.guards = this.createTowerGuards(tower);
+    }
+
+    slot.tower = tower;
+    slot.platform.setAlpha(0.42);
+    slot.inner.setAlpha(0.2);
+    slot.plus.setVisible(false);
+    sprite.on("pointerdown", () => this.selectTower(tower));
+    this.towers.push(tower);
+    this.selectTower(tower);
+    this.showNotice(`${type.name} 已部署`, "#315c22");
+    this.updateUi();
+  }
+
+  createTowerGuards(tower) {
+    return [-18, 18].map((offset) => {
+      const guard = this.add.image(tower.x + offset, tower.y + 18, "guard")
+        .setScale(0.82)
+        .setDepth(13);
+
+      return {
+        sprite: guard,
+        homeX: tower.x + offset,
+        homeY: tower.y + 18,
+      };
+    });
+  }
+
+  getTowerStats(typeKey, level, branch) {
+    const type = TOWER_TYPES[typeKey];
+
+    if (typeKey === "arrow") {
+      if (level >= 4 && branch) {
+        const branchStats = type.branches[branch];
+        return {
+          range: type.range + 18,
+          damage: branchStats.damage,
+          rate: branchStats.rate,
+          projectileSpeed: 590,
+          splash: branchStats.splash ?? 0,
+          slowFactor: 1,
+          slowMs: 0,
+          burnMs: 0,
+          burnDps: 0,
+          projectileKind: "arrow",
+        };
+      }
+
+      const stats = type.levels[Math.min(level, 3) - 1];
+      return {
+        range: type.range + (level - 1) * 10,
+        damage: stats.damage,
+        rate: stats.rate,
+        projectileSpeed: 560,
+        splash: 0,
+        slowFactor: 1,
+        slowMs: 0,
+        burnMs: 0,
+        burnDps: 0,
+        projectileKind: "arrow",
+      };
+    }
+
+    const levelBonus = level - 1;
+    return {
+      range: Math.round(type.range + levelBonus * 14),
+      damage: Math.round(type.damage * (1 + levelBonus * 0.36)),
+      rate: Math.max(220, Math.round(type.rate * (1 - levelBonus * 0.09))),
+      projectileSpeed: type.projectileSpeed,
+      splash: type.splash ?? 0,
+      slowFactor: type.slowFactor ?? 1,
+      slowMs: type.slowMs ?? 0,
+      burnMs: type.burnMs ?? 0,
+      burnDps: type.burnDps ? Math.round(type.burnDps * (1 + levelBonus * 0.24)) : 0,
+      projectileKind: type.projectile,
+      buffRate: type.buffRate ?? 1,
+    };
+  }
+
+  selectTower(tower) {
+    this.selectedTower = tower;
+    this.clearSelectedRange();
+    this.selectedRange = this.add.circle(tower.x, tower.y, tower.range, 0xffffff, 0)
+      .setStrokeStyle(3, TOWER_TYPES[tower.typeKey].color, 0.42)
+      .setDepth(6);
+    this.updateUi();
+  }
+
+  clearSelectedRange() {
+    this.selectedRange?.destroy();
+    this.selectedRange = null;
+  }
+
+  previewBuildRange(slot) {
+    if (slot.tower || this.gameEnded || this.modalOpen) {
+      return;
+    }
+
+    const type = TOWER_TYPES[this.selectedBuildType];
+    slot.platform.setStrokeStyle(4, type.color, 0.95);
+    this.hoverRange?.destroy();
+    this.hoverRange = this.add.circle(slot.x, slot.y, type.range, 0xffffff, 0)
+      .setStrokeStyle(2, type.color, 0.24)
+      .setDepth(4);
+  }
+
+  clearHoverRange(slot) {
+    if (!slot.tower) {
+      slot.platform.setStrokeStyle(4, 0x6a5a46, 1);
+    }
+
+    this.hoverRange?.destroy();
+    this.hoverRange = null;
+  }
+
+  startWave() {
+    if (this.waveActive || this.gameEnded || this.modalOpen || this.wave >= TOTAL_WAVES) {
+      return;
+    }
+
+    this.wave += 1;
+    this.recalculateAllHeroes();
+    this.recoverHeroes(0.22);
+    this.waveActive = true;
+    this.spawnedThisWave = 0;
+    this.enemiesThisWave = this.getWaveEnemyTotal(this.wave);
+    this.spawnEvery = Math.max(410, 860 - this.wave * 32);
+    this.nextSpawnAt = this.time.now + 450;
+    this.showNotice(`第 ${this.wave}/${TOTAL_WAVES} 波来袭`, "#7a3d12");
+    this.updateUi();
+  }
+
+  getWaveEnemyTotal(wave) {
+    return 9 + wave * 3;
+  }
+
+  updateSpawning(time) {
+    if (!this.waveActive || this.spawnedThisWave >= this.enemiesThisWave || time < this.nextSpawnAt) {
+      return;
+    }
+
+    const rank = this.getSpawnRank();
+    this.spawnEnemy(rank);
+    this.spawnedThisWave += 1;
+    this.nextSpawnAt = time + this.spawnEvery;
+  }
+
+  getSpawnRank() {
+    const isLast = this.spawnedThisWave === this.enemiesThisWave - 1;
+
+    if (this.wave === TOTAL_WAVES && isLast) {
+      return "boss";
+    }
+
+    if (this.wave >= 4 && isLast && this.wave % 2 === 0) {
+      return "elite";
+    }
+
+    if (this.wave >= 2 && Math.random() < 0.1) {
+      return "rare";
+    }
+
+    if (this.wave >= 2 && (this.spawnedThisWave % 6 === 5 || isLast)) {
+      return "heavy";
+    }
+
+    return "normal";
+  }
+
+  spawnEnemy(rank) {
+    const waveScale = this.wave - 1;
+    const rankStats = {
+      normal: { hp: 50, hpGrowth: 23, reward: 8, rewardGrowth: 1.5, speed: 62, texture: "enemy-scout", tint: 0xffffff, scale: 1, damage: 7 },
+      heavy: { hp: 145, hpGrowth: 50, reward: 28, rewardGrowth: 4, speed: 43, texture: "enemy-brute", tint: 0xffffff, scale: 1, damage: 12 },
+      rare: { hp: 92, hpGrowth: 34, reward: 16, rewardGrowth: 3, speed: 66, texture: "enemy-scout", tint: 0xb8deff, scale: 1.08, damage: 9 },
+      elite: { hp: 225, hpGrowth: 62, reward: 42, rewardGrowth: 6, speed: 45, texture: "enemy-brute", tint: 0xd6bbff, scale: 1.12, damage: 15 },
+      boss: { hp: 620, hpGrowth: 88, reward: 120, rewardGrowth: 10, speed: 34, texture: "enemy-brute", tint: 0xffcf70, scale: 1.35, damage: 22 },
+    };
+    const stats = rankStats[rank];
+    const maxHp = Math.round(stats.hp + waveScale * stats.hpGrowth);
+    const reward = Math.round(stats.reward + this.wave * stats.rewardGrowth);
+    const point = pointOnPath(0);
+    const sprite = this.add.sprite(point.x, point.y, stats.texture)
+      .setRotation(point.angle)
+      .setScale(stats.scale)
+      .setTint(stats.tint)
+      .setDepth(18);
+    const barWidth = rank === "boss" ? 58 : rank === "elite" ? 48 : rank === "heavy" ? 40 : 32;
+    const barBack = this.add.rectangle(point.x - barWidth / 2, point.y - 28, barWidth, 5, 0x3b2415, 0.9)
+      .setOrigin(0, 0.5)
+      .setDepth(19);
+    const barFill = this.add.rectangle(point.x - barWidth / 2, point.y - 28, barWidth, 5, rank === "boss" ? 0xf6c453 : 0xd6422a, 1)
+      .setOrigin(0, 0.5)
+      .setDepth(20);
+    const enemy = {
+      sprite,
+      barBack,
+      barFill,
+      maxHp,
+      hp: maxHp,
+      reward,
+      progress: 0,
+      speed: stats.speed + (rank === "normal" || rank === "rare" ? Math.min(28, this.wave * 3) : Math.min(18, this.wave * 2)),
+      alive: true,
+      isHeavy: rank === "heavy" || rank === "elite" || rank === "boss",
+      rank,
+      attackDamage: stats.damage + Math.floor(this.wave * 0.8),
+      nextAttackAt: 0,
+      slowUntil: 0,
+      slowFactor: 1,
+      burnUntil: 0,
+      burnDps: 0,
+      baseTint: stats.tint,
+      barWidth,
+    };
+
+    this.enemies.push(enemy);
+  }
+
+  updateEnemies(time, delta) {
+    const dt = delta / 1000;
+
+    [...this.enemies].forEach((enemy) => {
+      if (!enemy.alive) {
+        return;
+      }
+
+      if (time < enemy.burnUntil) {
+        enemy.hp -= enemy.burnDps * dt;
+        if (enemy.hp <= 0) {
+          this.destroyEnemy(enemy, true);
+          return;
+        }
+      }
+
+      if (time >= enemy.slowUntil) {
+        enemy.slowFactor = 1;
+      }
+
+      const slowed = time < enemy.slowUntil;
+      const burning = time < enemy.burnUntil;
+      const speed = enemy.speed * (slowed ? enemy.slowFactor : 1);
+      enemy.progress += speed * dt;
+
+      if (enemy.progress >= PATH_LENGTH) {
+        this.enemyEscaped(enemy);
+        return;
+      }
+
+      const point = pointOnPath(enemy.progress);
+      enemy.sprite.setPosition(point.x, point.y);
+      enemy.sprite.setRotation(point.angle);
+      enemy.sprite.setTint(slowed ? 0xb8d9ff : burning ? 0xff9b55 : enemy.baseTint);
+      enemy.barBack.setPosition(point.x - enemy.barWidth / 2, point.y - 28);
+      enemy.barFill.setPosition(point.x - enemy.barWidth / 2, point.y - 28);
+      enemy.barFill.setDisplaySize(enemy.barWidth * Phaser.Math.Clamp(enemy.hp / enemy.maxHp, 0, 1), 5);
+    });
+  }
+
+  updateTowers(time) {
+    this.towers.forEach((tower) => {
+      if (tower.typeKey === "altar") {
+        this.updateAltarTower(tower, time);
+        return;
+      }
+
+      const target = this.findTargetForTower(tower);
+
+      if (tower.typeKey === "barracks") {
+        this.updateBarracksTower(tower, target, time);
+        return;
+      }
+
+      if (!target) {
+        return;
+      }
+
+      if (time >= tower.nextFireAt) {
+        this.fireTower(tower, target, time);
+        this.pulseTower(tower);
+      }
+    });
+  }
+
+  updateAltarTower(tower, time) {
+    if (time < tower.nextFireAt) {
+      return;
+    }
+
+    const aura = this.add.circle(tower.x, tower.y, tower.range, TOWER_TYPES.altar.color, 0.08)
+      .setStrokeStyle(2, TOWER_TYPES.altar.accent, 0.25)
+      .setDepth(5);
+    this.tweens.add({
+      targets: aura,
+      alpha: 0,
+      scale: 1.06,
+      duration: 480,
+      onComplete: () => aura.destroy(),
+    });
+    tower.nextFireAt = time + 1800;
+  }
+
+  updateBarracksTower(tower, target, time) {
+    tower.guards.forEach((guard, index) => {
+      const goalX = target ? target.sprite.x - 18 + index * 36 : guard.homeX;
+      const goalY = target ? target.sprite.y + 18 : guard.homeY;
+
+      guard.sprite.x = Phaser.Math.Linear(guard.sprite.x, goalX, 0.16);
+      guard.sprite.y = Phaser.Math.Linear(guard.sprite.y, goalY, 0.16);
+      guard.sprite.setFlipX(target ? guard.sprite.x > target.sprite.x : false);
+    });
+
+    if (!target || time < tower.nextFireAt) {
+      return;
+    }
+
+    target.slowUntil = Math.max(target.slowUntil, time + tower.slowMs);
+    target.slowFactor = Math.min(target.slowFactor, tower.slowFactor);
+    this.damageEnemy(target, tower.damage * tower.guards.length, {
+      slowMs: tower.slowMs,
+      slowFactor: tower.slowFactor,
+    });
+    tower.nextFireAt = time + tower.rate * this.getTowerRateMultiplier(tower);
+  }
+
+  findTargetForTower(tower) {
+    return this.enemies
+      .filter((enemy) => enemy.alive && Phaser.Math.Distance.Between(tower.x, tower.y, enemy.sprite.x, enemy.sprite.y) <= tower.range)
+      .sort((a, b) => b.progress - a.progress)[0];
+  }
+
+  getTowerRateMultiplier(tower) {
+    const altar = this.towers.find((item) => item.typeKey === "altar" && item !== tower
+      && Phaser.Math.Distance.Between(item.x, item.y, tower.x, tower.y) <= item.range);
+    return altar ? altar.buffRate : 1;
+  }
+
+  fireTower(tower, target, time) {
+    const type = TOWER_TYPES[tower.typeKey];
+    const projectileKind = tower.projectileKind ?? type.projectile;
+
+    if (projectileKind === "arrow") {
+      const arrow = this.add.image(tower.x, tower.y - 16, "arrow-shot")
+        .setDepth(22);
+      this.projectiles.push(this.createProjectileData(arrow, tower, target));
+    } else {
+      const projectile = this.add.circle(tower.x, tower.y - 16, tower.splash ? 7 : 6, type.color, 1)
+        .setStrokeStyle(2, type.accent, 0.8)
+        .setDepth(22);
+      this.projectiles.push(this.createProjectileData(projectile, tower, target));
+    }
+
+    tower.nextFireAt = time + tower.rate * this.getTowerRateMultiplier(tower);
+  }
+
+  createProjectileData(sprite, tower, target) {
+    return {
+      sprite,
+      target,
+      damage: tower.damage,
+      speed: tower.projectileSpeed,
+      splash: tower.splash,
+      slowFactor: tower.slowFactor,
+      slowMs: tower.slowMs,
+      burnMs: tower.burnMs,
+      burnDps: tower.burnDps,
+      typeKey: tower.typeKey,
+    };
+  }
+
+  pulseTower(tower) {
+    this.tweens.add({
+      targets: tower.sprite,
+      scaleX: 1.08,
+      scaleY: 1.08,
+      yoyo: true,
+      duration: 80,
+    });
+  }
+
+  updateProjectiles(delta) {
+    const dt = delta / 1000;
+
+    [...this.projectiles].forEach((projectile) => {
+      if (!projectile.target?.alive) {
+        this.destroyProjectile(projectile);
+        return;
+      }
+
+      const targetX = projectile.target.sprite.x;
+      const targetY = projectile.target.sprite.y;
+      const distance = Phaser.Math.Distance.Between(projectile.sprite.x, projectile.sprite.y, targetX, targetY);
+      const travel = projectile.speed * dt;
+
+      projectile.sprite.rotation = Phaser.Math.Angle.Between(projectile.sprite.x, projectile.sprite.y, targetX, targetY);
+
+      if (distance <= travel) {
+        this.impactProjectile(projectile, targetX, targetY);
+        this.destroyProjectile(projectile);
+        return;
+      }
+
+      const angle = Phaser.Math.Angle.Between(projectile.sprite.x, projectile.sprite.y, targetX, targetY);
+      projectile.sprite.x += Math.cos(angle) * travel;
+      projectile.sprite.y += Math.sin(angle) * travel;
+    });
+  }
+
+  impactProjectile(projectile, x, y) {
+    if (projectile.splash > 0) {
+      const blast = this.add.circle(x, y, projectile.splash, projectile.typeKey === "flame" ? 0xd95f32 : 0xf5b83c, 0.2)
+        .setStrokeStyle(3, 0xffe2a2, 0.38)
+        .setDepth(21);
+
+      this.tweens.add({
+        targets: blast,
+        alpha: 0,
+        scale: 1.24,
+        duration: 220,
+        onComplete: () => blast.destroy(),
+      });
+
+      [...this.enemies].forEach((enemy) => {
+        const distance = Phaser.Math.Distance.Between(x, y, enemy.sprite.x, enemy.sprite.y);
+
+        if (enemy.alive && distance <= projectile.splash) {
+          const falloff = Phaser.Math.Clamp(1 - distance / (projectile.splash * 1.6), 0.42, 1);
+          this.damageEnemy(enemy, Math.round(projectile.damage * falloff), projectile);
+        }
+      });
+      return;
+    }
+
+    this.damageEnemy(projectile.target, projectile.damage, projectile);
+  }
+
+  damageEnemy(enemy, amount, source = {}) {
+    if (!enemy.alive) {
+      return;
+    }
+
+    enemy.hp -= amount;
+
+    if (source.slowMs > 0) {
+      enemy.slowUntil = Math.max(enemy.slowUntil, this.time.now + source.slowMs);
+      enemy.slowFactor = Math.min(enemy.slowFactor, source.slowFactor ?? 1);
+    }
+
+    if (source.stunMs > 0) {
+      enemy.slowUntil = Math.max(enemy.slowUntil, this.time.now + source.stunMs);
+      enemy.slowFactor = Math.min(enemy.slowFactor, 0.08);
+    }
+
+    if (source.burnMs > 0) {
+      enemy.burnUntil = Math.max(enemy.burnUntil, this.time.now + source.burnMs);
+      enemy.burnDps = Math.max(enemy.burnDps, source.burnDps ?? 0);
+    }
+
+    if (enemy.hp <= 0) {
+      this.destroyEnemy(enemy, true);
+    }
+  }
+
+  enemyEscaped(enemy) {
+    this.destroyEnemy(enemy, false);
+    this.lives -= enemy.isHeavy ? 2 : 1;
+    this.cameras.main.shake(160, 0.006);
+
+    if (this.lives <= 0) {
+      this.finishGame();
+      return;
+    }
+
+    this.updateUi();
+  }
+
+  destroyEnemy(enemy, rewarded) {
+    if (!enemy.alive) {
+      return;
+    }
+
+    enemy.alive = false;
+    this.enemies = this.enemies.filter((item) => item !== enemy);
+    enemy.sprite.destroy();
+    enemy.barBack.destroy();
+    enemy.barFill.destroy();
+
+    if (rewarded) {
+      this.gold += enemy.reward;
+      this.score += enemy.reward * 5;
+      this.tryDropLoot(enemy);
+      this.updateUi();
+    }
+  }
+
+  destroyProjectile(projectile) {
+    this.projectiles = this.projectiles.filter((item) => item !== projectile);
+    projectile.sprite.destroy();
+  }
+
+  tryDropLoot(enemy) {
+    const rates = {
+      normal: 0.02,
+      heavy: 0.035,
+      rare: 0.12,
+      elite: 0.2,
+      boss: 1,
+    };
+
+    if (Math.random() > (rates[enemy.rank] ?? 0.02)) {
+      return;
+    }
+
+    if (enemy.rank === "boss" && this.chooseLockedBlueprint()) {
+      const key = this.chooseLockedBlueprint();
+      this.unlockBlueprint(key);
+      this.showNotice(`Boss 掉落图纸：${TOWER_TYPES[key].name}`, "#5a4ba6");
+      return;
+    }
+
+    const rarity = enemy.rank === "boss" ? "传说" : enemy.rank === "elite" ? "史诗" : enemy.rank === "rare" ? "稀有" : "普通";
+    const item = this.createEquipment(pickRandom(BASIC_SHOP_ITEMS), rarity);
+    this.inventory.push(item);
+    this.showNotice(`敌人掉落：${item.name} 已进背包`, RARITY_CONFIG[rarity].color);
+  }
+
+  checkWaveComplete() {
+    if (!this.waveActive || this.spawnedThisWave < this.enemiesThisWave || this.enemies.length > 0) {
+      return;
+    }
+
+    const bonus = 24 + this.wave * 5;
+    this.waveActive = false;
+    this.defeatedWaves = Math.max(this.defeatedWaves, this.wave);
+    this.gold += bonus;
+    this.bestWave = Math.max(this.bestWave, this.wave);
+    localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
+    this.recoverHeroes(0.38);
+
+    if (this.wave >= TOTAL_WAVES) {
+      this.openMerchant("elite", true);
+      return;
+    }
+
+    if (this.wave % 3 === 0) {
+      this.openMerchant("wild", false);
+      return;
+    }
+
+    this.showNotice(`守住第 ${this.wave} 波  +${bonus}`, "#315c22");
+    this.updateUi();
+  }
+
+  upgradeSelectedTower() {
+    const tower = this.selectedTower;
+
+    if (!tower) {
+      return;
+    }
+
+    if (tower.typeKey === "arrow" && tower.level === 3 && !tower.branch) {
+      this.openArrowBranchModal(tower);
+      return;
+    }
+
+    if (tower.level >= this.getTowerMaxLevel(tower)) {
+      return;
+    }
+
+    const cost = this.getUpgradeCost(tower);
+
+    if (this.gold < cost) {
+      this.showNotice("金币不足", "#9c2b24");
+      this.cameras.main.shake(120, 0.004);
+      return;
+    }
+
+    this.gold -= cost;
+    tower.level += 1;
+    tower.totalCost += cost;
+    Object.assign(tower, this.getTowerStats(tower.typeKey, tower.level, tower.branch));
+    this.applyTowerVisual(tower);
+    this.selectTower(tower);
+    this.showNotice(`${this.getTowerDisplayName(tower)} Lv.${tower.level}`, "#7a3d12");
+    this.updateUi();
+  }
+
+  openArrowBranchModal(tower) {
+    this.createModalBase("弓箭塔四级分支", "选择一条路线。爆裂清小怪，鹰眼打精英和 Boss。");
+    const branches = [
+      ["burst", TOWER_TYPES.arrow.branches.burst],
+      ["hawk", TOWER_TYPES.arrow.branches.hawk],
+    ];
+
+    branches.forEach(([key, branch], index) => {
+      const x = 310 + index * 300;
+      this.addModalText(x - 105, 190, `${branch.name}\n${branch.description}\n升级费用 ${this.getUpgradeCost(tower)}`, 15, "#3a2816", 220);
+      const button = this.createButton(x, 292, 180, 38, `选择${branch.name}`, () => this.applyArrowBranch(tower, key), {
+        fill: key === "burst" ? 0xd95f32 : 0x6f8dbd,
+        stroke: 0x70451f,
+        color: "#fff6d8",
+        hoverFill: key === "burst" ? 0xec7448 : 0x84a7dc,
+      }).setDepth(93);
+      this.modalObjects.push(button);
+      this.setButtonEnabled(button, this.gold >= this.getUpgradeCost(tower));
+    });
+
+    const close = this.createButton(GAME_WIDTH / 2, 392, 150, 36, "稍后再说", () => this.closeModal(), {
+      fill: 0xe7c980,
+      stroke: 0x8a5a26,
+    }).setDepth(93);
+    this.modalObjects.push(close);
+  }
+
+  applyArrowBranch(tower, branchKey) {
+    const cost = this.getUpgradeCost(tower);
+
+    if (this.gold < cost) {
+      this.showNotice("金币不足", "#9c2b24");
+      return;
+    }
+
+    this.gold -= cost;
+    tower.level = 4;
+    tower.branch = branchKey;
+    tower.totalCost += cost;
+    Object.assign(tower, this.getTowerStats("arrow", 4, branchKey));
+    this.applyTowerVisual(tower);
+    this.closeModal();
+    this.selectTower(tower);
+    this.showNotice(`升级为${this.getTowerDisplayName(tower)}`, "#7a3d12");
+    this.updateUi();
+  }
+
+  applyTowerVisual(tower) {
+    tower.levelText.setText(["I", "II", "III", "IV"][tower.level - 1]);
+    tower.sprite.setScale(1 + (tower.level - 1) * 0.08);
+    tower.sprite.clearTint();
+    if (tower.branch === "burst") {
+      tower.sprite.setTint(0xffb071);
+    } else if (tower.branch === "hawk") {
+      tower.sprite.setTint(0xb8deff);
+    }
+  }
+
+  sellSelectedTower() {
+    const tower = this.selectedTower;
+
+    if (!tower) {
+      return;
+    }
+
+    const refund = Math.floor(tower.totalCost * 0.55);
+    tower.slot.tower = null;
+    tower.slot.platform.setAlpha(1);
+    tower.slot.inner.setAlpha(1);
+    tower.slot.plus.setVisible(true);
+    tower.shadow.destroy();
+    tower.sprite.destroy();
+    tower.levelText.destroy();
+    tower.guards.forEach((guard) => guard.sprite.destroy());
+    this.towers = this.towers.filter((item) => item !== tower);
+    this.selectedTower = null;
+    this.clearSelectedRange();
+    this.gold += refund;
+    this.showNotice(`回收 +${refund}`, "#315c22");
+    this.updateUi();
+  }
+
+  getTowerMaxLevel(tower) {
+    return tower.typeKey === "arrow" ? 4 : 3;
+  }
+
+  getUpgradeCost(tower) {
+    if (tower.typeKey === "arrow" && tower.level === 3 && !tower.branch) {
+      return 120;
+    }
+
+    return Math.round(TOWER_TYPES[tower.typeKey].price * (0.8 + tower.level * 0.58));
+  }
+
+  getTowerDisplayName(tower) {
+    if (tower.typeKey === "arrow" && tower.branch) {
+      return TOWER_TYPES.arrow.branches[tower.branch].name;
+    }
+
+    return TOWER_TYPES[tower.typeKey].name;
+  }
+
+  isTowerUnlocked(key) {
+    const type = TOWER_TYPES[key];
+    return !type.blueprintKey || this.unlockedBlueprints.has(key);
+  }
+
+  createEquipment(id, rarity = "普通") {
+    const base = EQUIPMENT_CATALOG[id];
+    const rarityConfig = RARITY_CONFIG[rarity];
+    const multiplier = rarityConfig.multiplier;
+    const suffix = rarity === "普通" ? "" : `·${rarity}`;
+
+    return {
+      uid: `${id}-${rarity}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+      catalogId: id,
+      rarity,
+      name: `${rarityConfig.prefix}${base.name}${suffix}`,
+      baseName: base.name,
+      price: Math.max(1, Math.round(base.price * multiplier)),
+      slot: base.slot,
+      strengthReq: base.strengthReq ?? 0,
+      allowedHeroes: base.allowedHeroes ?? null,
+      stats: cloneStats(base.stats, multiplier),
+      desc: base.desc,
+    };
+  }
+
+  getSelectedShopHero() {
+    return this.heroes.find((hero) => hero.id === this.selectedShopHeroId) ?? this.heroes[0];
+  }
+
+  canEquip(hero, item) {
+    if (item.strengthReq && hero.strength < item.strengthReq) {
+      return false;
+    }
+
+    if (item.allowedHeroes && !item.allowedHeroes.includes(hero.id)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  equipHero(hero, item) {
+    if (!this.canEquip(hero, item)) {
+      this.showNotice(`${hero.name} 无法装备 ${item.name}`, "#9c2b24");
+      return false;
+    }
+
+    const oldItem = hero.equipment[item.slot];
+    if (oldItem) {
+      this.inventory.push(oldItem);
+    }
+
+    hero.equipment[item.slot] = item;
+    this.recalculateHeroStats(hero);
+    hero.hp = Math.min(hero.hp + Math.round(hero.stats.maxHp * 0.12), hero.stats.maxHp);
+    this.updateHeroSprite(hero);
+    this.showNotice(`${hero.name} 装备了 ${item.name}`, RARITY_CONFIG[item.rarity].color);
+    return true;
+  }
+
+  recalculateAllHeroes() {
+    this.heroes.forEach((hero) => this.recalculateHeroStats(hero));
+  }
+
+  recalculateHeroStats(hero) {
+    const stage = this.getTiezhuBlockStage();
+    const stats = {
+      maxHp: hero.maxHp,
+      damage: hero.damage,
+      range: hero.range,
+      rate: hero.rate,
+      armor: hero.armor ?? 0,
+      magicArmor: 0,
+      critChance: hero.critChance ?? 0,
+      blockChance: hero.id === "tiezhu" ? stage.chance : 0,
+      blockReduce: hero.id === "tiezhu" ? stage.reduce : 0,
+      regen: 0,
+      healPower: hero.healPower ?? 0,
+      slowMs: hero.slowMs ?? 0,
+      slowFactor: hero.slowFactor ?? 1,
+      stunChance: 0,
+      ranged: 0,
+    };
+
+    Object.values(hero.equipment).filter(Boolean).forEach((item) => {
+      Object.entries(item.stats).forEach(([key, value]) => {
+        if (key === "attackSpeed") {
+          stats.rate *= 1 - value;
+        } else if (key === "cooldown") {
+          stats.rate *= 1 - value;
+        } else if (key === "ranged") {
+          stats.ranged = Math.max(stats.ranged, value);
+        } else if (key === "blockChance") {
+          stats.blockChance += value;
+        } else if (key === "blockReduce") {
+          stats.blockReduce = Math.max(stats.blockReduce, value);
+        } else {
+          stats[key] = (stats[key] ?? 0) + value;
+        }
+      });
+    });
+
+    stats.rate = Math.max(260, Math.round(stats.rate));
+    stats.maxHp = Math.round(stats.maxHp);
+    stats.damage = Math.round(stats.damage);
+    stats.range = Math.round(stats.range);
+    stats.armor = Math.round(stats.armor);
+    stats.blockChance = Phaser.Math.Clamp(stats.blockChance, 0, 0.55);
+    stats.blockReduce = Phaser.Math.Clamp(stats.blockReduce, 0, 0.75);
+    hero.stats = stats;
+    hero.hp = Math.min(hero.hp ?? stats.maxHp, stats.maxHp);
+  }
+
+  getTiezhuBlockStage() {
+    if (this.wave >= 7) {
+      return { chance: 0.25, reduce: 0.5 };
+    }
+
+    if (this.wave >= 4) {
+      return { chance: 0.2, reduce: 0.45 };
+    }
+
+    return { chance: 0.15, reduce: 0.4 };
+  }
+
+  updateHeroes(time, delta) {
+    const dt = delta / 1000;
+
+    this.heroes.forEach((hero) => {
+      if (hero.dead) {
+        return;
+      }
+
+      if (hero.stats.regen > 0 && hero.hp < hero.stats.maxHp) {
+        hero.hp = Math.min(hero.stats.maxHp, hero.hp + hero.stats.regen * dt);
+      }
+
+      this.updateHeroSupport(hero, time);
+      const target = this.findHeroTarget(hero);
+
+      if (target) {
+        const targetX = target.sprite.x;
+        const targetY = target.sprite.y;
+        const distance = Phaser.Math.Distance.Between(hero.x, hero.y, targetX, targetY);
+        const attackDistance = hero.stats.ranged ? hero.stats.range : Math.min(hero.stats.range, 48);
+
+        if (distance > attackDistance) {
+          const angle = Phaser.Math.Angle.Between(hero.x, hero.y, targetX, targetY);
+          hero.x += Math.cos(angle) * 110 * dt;
+          hero.y += Math.sin(angle) * 110 * dt;
+        } else if (time >= hero.nextAttackAt) {
+          this.heroAttack(hero, target, time);
+        }
+      } else {
+        hero.x = Phaser.Math.Linear(hero.x, hero.homeX, 0.06);
+        hero.y = Phaser.Math.Linear(hero.y, hero.homeY, 0.06);
+      }
+
+      this.updateHeroSprite(hero);
+    });
+
+    this.updateEnemyAttacks(time);
+  }
+
+  updateHeroSupport(hero, time) {
+    if (hero.id !== "yueguang" || time < hero.nextHealAt) {
+      return;
+    }
+
+    const target = this.heroes
+      .filter((item) => !item.dead && item.hp < item.stats.maxHp * 0.82)
+      .sort((a, b) => a.hp / a.stats.maxHp - b.hp / b.stats.maxHp)[0];
+
+    if (!target) {
+      return;
+    }
+
+    const heal = hero.stats.healPower + Math.round((hero.stats.magic ?? 0) * 0.45);
+    target.hp = Math.min(target.stats.maxHp, target.hp + heal);
+    this.addFloatingText(target.x, target.y - 34, `+${heal}`, "#3a8f52");
+    hero.nextHealAt = time + 2400;
+  }
+
+  findHeroTarget(hero) {
+    return this.enemies
+      .filter((enemy) => enemy.alive && Phaser.Math.Distance.Between(hero.x, hero.y, enemy.sprite.x, enemy.sprite.y) <= hero.stats.range)
+      .sort((a, b) => b.progress - a.progress)[0];
+  }
+
+  heroAttack(hero, target, time) {
+    let damage = hero.stats.damage;
+    const critical = Math.random() < hero.stats.critChance;
+
+    if (critical) {
+      damage = Math.round(damage * 1.75);
+    }
+
+    const source = {};
+
+    if (hero.stats.slowMs > 0) {
+      source.slowMs = hero.stats.slowMs;
+      source.slowFactor = hero.stats.slowFactor;
+    }
+
+    if (hero.stats.stunChance > 0 && Math.random() < hero.stats.stunChance) {
+      source.stunMs = 420;
+      this.addFloatingText(target.sprite.x, target.sprite.y - 36, "眩晕", "#6d2e18");
+    }
+
+    this.damageEnemy(target, damage, source);
+    this.addHeroStrike(hero, target, critical);
+    hero.nextAttackAt = time + hero.stats.rate;
+  }
+
+  addHeroStrike(hero, target, critical) {
+    const line = this.add.line(0, 0, hero.x, hero.y - 4, target.sprite.x, target.sprite.y, critical ? 0xfff1a8 : hero.accent, 0.86)
+      .setLineWidth(critical ? 4 : 2)
+      .setDepth(24);
+    this.heroEffects.push({ object: line, ttl: 110 });
+  }
+
+  updateEnemyAttacks(time) {
+    this.enemies.forEach((enemy) => {
+      if (!enemy.alive || time < enemy.nextAttackAt) {
+        return;
+      }
+
+      const target = this.heroes
+        .filter((hero) => !hero.dead && Phaser.Math.Distance.Between(hero.x, hero.y, enemy.sprite.x, enemy.sprite.y) <= 48)
+        .sort((a, b) => Phaser.Math.Distance.Between(a.x, a.y, enemy.sprite.x, enemy.sprite.y)
+          - Phaser.Math.Distance.Between(b.x, b.y, enemy.sprite.x, enemy.sprite.y))[0];
+
+      if (!target) {
+        return;
+      }
+
+      this.damageHero(target, enemy.attackDamage, enemy);
+      enemy.nextAttackAt = time + (enemy.rank === "boss" ? 760 : 1120);
+    });
+  }
+
+  damageHero(hero, amount) {
+    let damage = Math.max(1, amount - hero.stats.armor);
+    let blocked = false;
+
+    if (hero.stats.blockChance > 0 && Math.random() < hero.stats.blockChance) {
+      damage = Math.max(1, Math.round(damage * (1 - hero.stats.blockReduce)));
+      blocked = true;
+    }
+
+    hero.hp -= damage;
+    this.addFloatingText(hero.x, hero.y - 38, blocked ? `格挡 -${damage}` : `-${damage}`, blocked ? "#2f4972" : "#9c2b24");
+
+    if (hero.hp <= 0) {
+      hero.hp = 0;
+      hero.dead = true;
+      hero.group.setAlpha(0.42);
+      this.addFloatingText(hero.x, hero.y - 16, "倒下", "#9c2b24");
+    }
+
+    this.updateHeroSprite(hero);
+    this.updateUi();
+  }
+
+  recoverHeroes(ratio) {
+    this.heroes.forEach((hero) => {
+      hero.dead = false;
+      hero.group?.setAlpha(1);
+      hero.hp = Math.min(hero.stats.maxHp, Math.max(hero.hp, hero.stats.maxHp * ratio));
+      this.updateHeroSprite(hero);
+    });
+  }
+
+  updateHeroSprite(hero) {
+    if (!hero.group) {
+      return;
+    }
+
+    hero.group.setPosition(hero.x, hero.y);
+    hero.hpFill.setDisplaySize(44 * Phaser.Math.Clamp(hero.hp / hero.stats.maxHp, 0, 1), 5);
+    hero.nameLabel.setText(`${hero.name}`);
+  }
+
+  updateHeroEffects(delta) {
+    this.heroEffects = this.heroEffects.filter((effect) => {
+      effect.ttl -= delta;
+      effect.object.setAlpha(Math.max(0, effect.ttl / 110));
+      if (effect.ttl <= 0) {
+        effect.object.destroy();
+        return false;
+      }
+
+      return true;
+    });
+  }
+
+  addFloatingText(x, y, text, color) {
+    const label = this.add.text(x, y, text, {
+      fontFamily: "Inter, system-ui, sans-serif",
+      fontSize: "14px",
+      color,
+      fontStyle: "700",
+    }).setOrigin(0.5).setDepth(50);
+
+    this.tweens.add({
+      targets: label,
+      y: y - 18,
+      alpha: 0,
+      duration: 720,
+      onComplete: () => label.destroy(),
+    });
+  }
+
+  openEquipmentShop() {
+    this.createModalBase("装备商店", "选择英雄后购买装备。力量不足或职业不合时不能装备。");
+    const hero = this.getSelectedShopHero();
+
+    this.renderHeroPicker(128);
+    this.addModalText(164, 156, `当前：${hero.name}  力量 ${hero.strength}\n${this.getHeroEquipmentSummary(hero)}`, 14, "#3a2816", 620);
+
+    BASIC_SHOP_ITEMS.forEach((id, index) => {
+      const item = this.createEquipment(id);
+      const col = index % 2;
+      const row = Math.floor(index / 2);
+      const x = 174 + col * 326;
+      const y = 220 + row * 48;
+      const canBuy = this.gold >= item.price && this.canEquip(hero, item);
+      const req = item.strengthReq ? ` 力量${item.strengthReq}` : "";
+
+      this.addModalText(x, y - 18, `${item.name} ${item.price}金${req}\n${item.desc}`, 13, RARITY_CONFIG[item.rarity].color, 238);
+      const button = this.createButton(x + 230, y - 2, 80, 28, "购买", () => {
+        this.buyAndEquipShopItem(id);
+      }, {
+        fill: 0xe7c980,
+        stroke: 0x8a5a26,
+      }).setDepth(93);
+      this.modalObjects.push(button);
+      this.setButtonEnabled(button, canBuy);
+    });
+
+    this.addModalCloseButton("关闭", () => this.closeModal());
+  }
+
+  buyAndEquipShopItem(id) {
+    const hero = this.getSelectedShopHero();
+    const item = this.createEquipment(id);
+
+    if (this.gold < item.price) {
+      this.showNotice("金币不足", "#9c2b24");
+      return;
+    }
+
+    if (!this.canEquip(hero, item)) {
+      this.showNotice(`${hero.name} 无法装备 ${item.name}`, "#9c2b24");
+      return;
+    }
+
+    this.gold -= item.price;
+    this.equipHero(hero, item);
+    this.openEquipmentShop();
+    this.updateUi();
+  }
+
+  openInventory() {
+    this.createModalBase("背包", "敌人掉落的装备会放在这里。选择英雄后点击装备。");
+    const hero = this.getSelectedShopHero();
+
+    this.renderHeroPicker(128);
+    this.addModalText(164, 156, `当前：${hero.name}  力量 ${hero.strength}\n${this.getHeroEquipmentSummary(hero)}`, 14, "#3a2816", 620);
+
+    if (this.inventory.length === 0) {
+      this.addModalText(350, 256, "背包是空的。打稀有敌人、精英敌人或 Boss 可以掉装备。", 16, "#70451f", 310);
+    } else {
+      this.inventory.slice(0, 8).forEach((item, index) => {
+        const col = index % 2;
+        const row = Math.floor(index / 2);
+        const x = 174 + col * 326;
+        const y = 224 + row * 56;
+        const canEquip = this.canEquip(hero, item);
+
+        this.addModalText(x, y - 20, `${item.name}\n${item.desc}${item.strengthReq ? ` 力量${item.strengthReq}` : ""}`, 13, RARITY_CONFIG[item.rarity].color, 238);
+        const button = this.createButton(x + 230, y - 2, 80, 28, "装备", () => this.equipInventoryItem(item.uid), {
+          fill: 0x8fb76b,
+          stroke: 0x4c7135,
+          color: "#183111",
+          hoverFill: 0xa0c77e,
+        }).setDepth(93);
+        this.modalObjects.push(button);
+        this.setButtonEnabled(button, canEquip);
+      });
+    }
+
+    this.addModalCloseButton("关闭", () => this.closeModal());
+  }
+
+  equipInventoryItem(uid) {
+    const hero = this.getSelectedShopHero();
+    const index = this.inventory.findIndex((item) => item.uid === uid);
+
+    if (index === -1) {
+      return;
+    }
+
+    const [item] = this.inventory.splice(index, 1);
+    if (!this.equipHero(hero, item)) {
+      this.inventory.splice(index, 0, item);
+    }
+
+    this.openInventory();
+    this.updateUi();
+  }
+
+  renderHeroPicker(y) {
+    this.heroes.forEach((hero, index) => {
+      const selected = hero.id === this.selectedShopHeroId;
+      const button = this.createButton(260 + index * 170, y, 136, 32, hero.name, () => {
+        this.selectedShopHeroId = hero.id;
+        if (this.modalKind === "inventory") {
+          this.openInventory();
+        } else {
+          this.openEquipmentShop();
+        }
+      }, {
+        fill: selected ? 0xf5b83c : 0xe7c980,
+        stroke: selected ? 0xc64c35 : 0x8a5a26,
+      }).setDepth(93);
+      button.selected = selected;
+      this.modalObjects.push(button);
+    });
+  }
+
+  getHeroEquipmentSummary(hero) {
+    const slotNames = { weapon: "武器", armor: "防具", offhand: "副手" };
+    return Object.entries(slotNames)
+      .map(([slot, label]) => `${label}:${hero.equipment[slot]?.name ?? "无"}`)
+      .join("  ");
+  }
+
+  openMerchant(kind, finalAfterClose) {
+    this.currentMerchant = {
+      kind,
+      finalAfterClose,
+      limit: kind === "elite" ? 2 : 99,
+      purchases: 0,
+      goods: kind === "elite" ? this.generateEliteGoods() : this.generateWildGoods(),
+    };
+    this.renderMerchant();
+  }
+
+  generateWildGoods() {
+    const goods = [
+      { kind: "heal", name: "行军药包", price: 22, desc: "所有英雄恢复 45% 生命" },
+      { kind: "lives", name: "修补城门", price: 28, desc: "生命 +4" },
+      { kind: "equipment", item: this.createEquipment(pickRandom(BASIC_SHOP_ITEMS), "稀有"), price: 34, desc: "随机稀有装备" },
+    ];
+
+    const blueprint = Math.random() < 0.25 ? this.chooseLockedBlueprint() : null;
+    if (blueprint) {
+      goods.push({ kind: "blueprint", towerKey: blueprint, name: `${TOWER_TYPES[blueprint].name}图纸`, price: 62, desc: "永久解锁特殊塔" });
+    } else {
+      goods.push({ kind: "fragment", name: "特殊塔图纸碎片", price: 26, desc: "集齐 3 个自动解锁一张图纸" });
+    }
+
+    goods.push({ kind: "equipment", item: this.createEquipment(pickRandom(BASIC_SHOP_ITEMS), Math.random() < 0.35 ? "史诗" : "稀有"), price: 48, desc: "野外带来的好货" });
+    return goods;
+  }
+
+  generateEliteGoods() {
+    const goods = [];
+    const blueprint = this.chooseLockedBlueprint();
+
+    if (blueprint) {
+      goods.push({ kind: "blueprint", towerKey: blueprint, name: `${TOWER_TYPES[blueprint].name}图纸`, price: 70, desc: "章节末必出特殊塔图纸" });
+    } else {
+      goods.push({ kind: "fragment", name: "图纸大师补偿", price: 0, desc: "所有特殊塔已解锁，获得 80 金币" });
+    }
+
+    ["hammer", "bow", "staff", "iron", "shield"].slice(0, 4).forEach((id) => {
+      const item = this.createEquipment(id, "传说");
+      goods.push({ kind: "equipment", item, price: Math.max(65, item.price * 3), desc: "传说级装备武器" });
+    });
+
+    return goods;
+  }
+
+  renderMerchant() {
+    const merchant = this.currentMerchant;
+    const title = merchant.kind === "elite" ? "精英商人" : "野生商人";
+    const subtitle = merchant.kind === "elite"
+      ? `章节最后出现。只能购买 2 个商品，必定有特殊塔图纸。已买 ${merchant.purchases}/${merchant.limit}`
+      : "每三关出现。可能出售特殊塔图纸、稀有装备和补给。";
+
+    this.createModalBase(title, subtitle);
+    merchant.goods.forEach((good, index) => {
+      const y = 150 + index * 54;
+      const name = good.item ? good.item.name : good.name;
+      const price = good.price ?? good.item?.price ?? 0;
+      const bought = good.bought;
+      const limited = merchant.purchases >= merchant.limit;
+
+      this.addModalText(168, y - 18, `${name}  ${price}金\n${good.desc}`, 14, good.item ? RARITY_CONFIG[good.item.rarity].color : "#3a2816", 460);
+      const button = this.createButton(706, y, 120, 30, bought ? "已购买" : "购买", () => this.buyMerchantGood(index), {
+        fill: merchant.kind === "elite" ? 0xf5b83c : 0xe7c980,
+        stroke: 0x8a5a26,
+      }).setDepth(93);
+      this.modalObjects.push(button);
+      this.setButtonEnabled(button, !bought && !limited && this.gold >= price);
+    });
+
+    this.addModalCloseButton(merchant.finalAfterClose ? "结束章节" : "离开", () => {
+      const final = merchant.finalAfterClose;
+      this.closeModal();
+      if (final) {
+        this.finishVictory();
+      }
+    });
+  }
+
+  buyMerchantGood(index) {
+    const merchant = this.currentMerchant;
+    const good = merchant.goods[index];
+    const price = good.price ?? good.item?.price ?? 0;
+
+    if (good.bought || merchant.purchases >= merchant.limit || this.gold < price) {
+      return;
+    }
+
+    this.gold -= price;
+    good.bought = true;
+    merchant.purchases += 1;
+
+    if (good.kind === "equipment") {
+      this.inventory.push(good.item);
+      this.showNotice(`${good.item.name} 已进背包`, RARITY_CONFIG[good.item.rarity].color);
+    } else if (good.kind === "blueprint") {
+      this.unlockBlueprint(good.towerKey);
+    } else if (good.kind === "fragment") {
+      if (this.chooseLockedBlueprint()) {
+        this.addBlueprintFragment();
+      } else {
+        this.gold += 80;
+        this.showNotice("特殊塔已全解锁：金币 +80", "#315c22");
+      }
+    } else if (good.kind === "heal") {
+      this.recoverHeroes(0.45);
+      this.showNotice("所有英雄恢复生命", "#315c22");
+    } else if (good.kind === "lives") {
+      this.lives += 4;
+      this.showNotice("城门生命 +4", "#315c22");
+    }
+
+    this.renderMerchant();
+    this.updateUi();
+  }
+
+  chooseLockedBlueprint() {
+    const locked = SPECIAL_TOWER_KEYS.filter((key) => !this.unlockedBlueprints.has(key));
+    return locked.length ? pickRandom(locked) : null;
+  }
+
+  unlockBlueprint(key) {
+    if (!key || this.unlockedBlueprints.has(key)) {
+      return;
+    }
+
+    this.unlockedBlueprints.add(key);
+    this.showNotice(`解锁特殊塔：${TOWER_TYPES[key].name}`, "#5a4ba6");
+    this.updateUi();
+  }
+
+  addBlueprintFragment() {
+    this.blueprintFragments += 1;
+
+    if (this.blueprintFragments >= 3) {
+      const key = this.chooseLockedBlueprint();
+      this.blueprintFragments = 0;
+      if (key) {
+        this.unlockBlueprint(key);
+      } else {
+        this.gold += 60;
+        this.showNotice("图纸已全解锁：金币 +60", "#315c22");
+      }
+    }
+  }
+
+  createModalBase(title, subtitle) {
+    this.closeModal(true);
+    this.modalOpen = true;
+    this.modalKind = title === "背包" ? "inventory" : title === "装备商店" ? "shop" : "modal";
+    const addObject = (object) => {
+      this.modalObjects.push(object);
+      return object;
+    };
+
+    addObject(this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x20150d, 0.58)
+      .setDepth(88)
+      .setInteractive());
+    addObject(this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 720, 456, 0xf6e2a9, 1)
+      .setStrokeStyle(4, 0x7a4b25, 1)
+      .setDepth(89));
+    addObject(this.add.text(146, 62, title, {
+      ...TEXT_STYLE,
+      fontSize: "28px",
+      color: "#4a2d17",
+    }).setDepth(90));
+    addObject(this.add.text(148, 100, subtitle, {
+      ...TEXT_STYLE,
+      fontSize: "15px",
+      color: "#70451f",
+      wordWrap: { width: 650, useAdvancedWrap: true },
+    }).setDepth(90));
+  }
+
+  addModalText(x, y, text, size, color, width) {
+    const label = this.add.text(x, y, text, {
+      fontFamily: "Inter, system-ui, sans-serif",
+      fontSize: `${size}px`,
+      color,
+      lineSpacing: 4,
+      wordWrap: { width, useAdvancedWrap: true },
+    }).setDepth(92);
+    this.modalObjects.push(label);
+    return label;
+  }
+
+  addModalCloseButton(label, onClick) {
+    const button = this.createButton(GAME_WIDTH / 2, 470, 154, 36, label, onClick, {
+      fill: 0x8fb76b,
+      stroke: 0x4c7135,
+      color: "#183111",
+      hoverFill: 0xa0c77e,
+    }).setDepth(93);
+    this.modalObjects.push(button);
+  }
+
+  closeModal(silent = false) {
+    this.modalObjects.forEach((object) => object.destroy());
+    this.modalObjects = [];
+    this.modalOpen = false;
+    this.modalKind = null;
+    if (!silent) {
+      this.updateUi?.();
+    }
+  }
+
+  finishGame() {
+    this.gameEnded = true;
+    this.waveActive = false;
+    this.bestWave = Math.max(this.bestWave, this.wave);
+    localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
+    this.endOverlay.setVisible(true);
+    this.centerText.setText(`前哨失守\n坚持到第 ${this.wave} 波\n得分 ${this.score}`);
+    this.centerText.setVisible(true);
+    this.restartButton.setVisible(true);
+    this.updateUi();
+  }
+
+  finishVictory() {
+    this.gameEnded = true;
+    this.bestWave = TOTAL_WAVES;
+    localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
+    this.endOverlay.setVisible(true);
+    this.centerText.setText(`前哨守住了\n完成 ${TOTAL_WAVES}/${TOTAL_WAVES} 波\n得分 ${this.score}`);
+    this.centerText.setVisible(true);
+    this.restartButton.setVisible(true);
+    this.showNotice("所有怪兽波次已清空", "#315c22");
+    this.updateUi();
+  }
+
+  showNotice(message, color) {
+    this.tweens.killTweensOf(this.noticeText);
+    this.noticeText.setText(message).setColor(color).setAlpha(1);
+    this.tweens.add({
+      targets: this.noticeText,
+      alpha: 0,
+      delay: 950,
+      duration: 450,
+    });
+  }
+
+  updateUi() {
+    if (!this.hudText) {
+      return;
+    }
+
+    const remainingEnemies = this.getRemainingEnemiesInWave();
+    const waveLabel = this.wave > 0 ? `${this.wave}/${TOTAL_WAVES}` : `0/${TOTAL_WAVES}`;
+    const heroHp = this.heroes.map((hero) => `${hero.name.slice(1)} ${Math.ceil(hero.hp)}/${hero.stats.maxHp}`).join("  ");
+    this.hudText.setText(
+      `金币 ${this.gold}  生命 ${Math.max(this.lives, 0)}  第 ${waveLabel} 波  敌人 ${remainingEnemies}  背包 ${this.inventory.length}  碎片 ${this.blueprintFragments}/3  得分 ${this.score}\n${heroHp}`,
+    );
+
+    if (this.wave >= TOTAL_WAVES && !this.waveActive) {
+      this.setButtonLabel(this.startButton, "波次已完成");
+    } else {
+      this.setButtonLabel(this.startButton, this.waveActive ? `第 ${this.wave}/${TOTAL_WAVES} 波中` : `开始第 ${this.wave + 1}/${TOTAL_WAVES} 波`);
+    }
+
+    this.setButtonEnabled(this.startButton, !this.waveActive && !this.gameEnded && !this.modalOpen && this.wave < TOTAL_WAVES);
+    this.setButtonLabel(this.inventoryButton, `背包 ${this.inventory.length}`);
+    this.updateTowerButtons();
+    this.updateSelectionPanel();
+  }
+
+  getRemainingEnemiesInWave() {
+    if (!this.waveActive) {
+      return 0;
+    }
+
+    return this.enemies.length + Math.max(this.enemiesThisWave - this.spawnedThisWave, 0);
+  }
+
+  updateTowerButtons() {
+    this.towerButtons.forEach(({ key, button, icon }) => {
+      const selected = key === this.selectedBuildType && !this.selectedTower;
+      const unlocked = this.isTowerUnlocked(key);
+      const tower = TOWER_TYPES[key];
+      button.selected = selected;
+      button.bg.setStrokeStyle(3, selected ? 0xc64c35 : 0x8a5a26, 1);
+      button.bg.setFillStyle(selected ? 0xf5b83c : button.defaultFill, 1);
+      this.setButtonLabel(button, unlocked ? `${tower.name} ${tower.price}` : `${tower.name} 图纸`);
+      this.setButtonEnabled(button, unlocked && !this.gameEnded);
+      icon.setAlpha(unlocked ? 1 : 0.38);
+    });
+  }
+
+  updateSelectionPanel() {
+    if (!this.selectedTower) {
+      const type = TOWER_TYPES[this.selectedBuildType];
+      const unlocked = this.isTowerUnlocked(this.selectedBuildType);
+      const previewStats = this.getTowerStats(this.selectedBuildType, 1, null);
+      this.selectionText.setText(
+        `${type.name}\n${unlocked ? type.description : "需要特殊塔图纸"}\n花费 ${type.price}\n伤害 ${previewStats.damage}\n射程 ${previewStats.range}\n攻速 ${(1000 / previewStats.rate).toFixed(1)}/秒`,
+      );
+      this.upgradeButton.setVisible(false);
+      this.sellButton.setVisible(false);
+      return;
+    }
+
+    const tower = this.selectedTower;
+    const upgradeCost = this.getUpgradeCost(tower);
+    const atMax = tower.level >= this.getTowerMaxLevel(tower);
+    const branchReady = tower.typeKey === "arrow" && tower.level === 3 && !tower.branch;
+
+    this.selectionText.setText(
+      `${this.getTowerDisplayName(tower)} Lv.${tower.level}\n${tower.branch ? TOWER_TYPES.arrow.branches[tower.branch].description : TOWER_TYPES[tower.typeKey].description}\n伤害 ${tower.damage}\n射程 ${tower.range}\n攻速 ${(1000 / tower.rate).toFixed(1)}/秒`,
+    );
+    this.upgradeButton.setVisible(true);
+    this.sellButton.setVisible(true);
+    this.setButtonLabel(this.upgradeButton, atMax ? "已满级" : branchReady ? `四级分支 ${upgradeCost}` : `升级 ${upgradeCost}`);
+    this.setButtonLabel(this.sellButton, `出售 +${Math.floor(tower.totalCost * 0.55)}`);
+    this.setButtonEnabled(this.upgradeButton, !atMax);
+    this.setButtonEnabled(this.sellButton, true);
+  }
+}
+
