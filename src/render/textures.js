@@ -3,10 +3,6 @@ export function createGameTextures(scene) {
 
   textureEnemyScout(graphics);
   textureEnemyBrute(graphics);
-  textureTowerArrow(graphics);
-  textureTowerMage(graphics);
-  textureTowerBarracks(graphics);
-  textureTowerArtillery(graphics);
   textureGuard(graphics);
   textureArrow(graphics);
   textureTree(graphics);
@@ -46,66 +42,6 @@ function textureEnemyBrute(graphics) {
     graphics.lineBetween(12, 36, 10, 45);
     graphics.lineBetween(32, 37, 31, 46);
     graphics.generateTexture("enemy-brute", 52, 48);
-}
-
-function textureTowerArrow(graphics) {
-    graphics.clear();
-    graphics.fillStyle(0x6f4522, 1);
-    graphics.fillRoundedRect(12, 22, 32, 28, 5);
-    graphics.fillStyle(0xb66d31, 1);
-    graphics.fillTriangle(8, 24, 28, 5, 48, 24);
-    graphics.fillStyle(0xe3b05f, 1);
-    graphics.fillRect(24, 20, 8, 28);
-    graphics.lineStyle(3, 0x382515, 1);
-    graphics.strokeTriangle(8, 24, 28, 5, 48, 24);
-    graphics.lineStyle(3, 0xf4d28a, 1);
-    graphics.lineBetween(18, 31, 38, 31);
-    graphics.generateTexture("tower-arrow", 56, 56);
-}
-
-function textureTowerMage(graphics) {
-    graphics.clear();
-    graphics.fillStyle(0x6f6e86, 1);
-    graphics.fillRoundedRect(13, 22, 30, 28, 6);
-    graphics.fillStyle(0x4e4968, 1);
-    graphics.fillRect(18, 28, 20, 22);
-    graphics.fillStyle(0x8d5cff, 1);
-    graphics.fillTriangle(28, 3, 14, 28, 42, 28);
-    graphics.fillStyle(0xe7d7ff, 0.95);
-    graphics.fillTriangle(28, 8, 22, 25, 34, 25);
-    graphics.lineStyle(3, 0x302842, 1);
-    graphics.strokeTriangle(28, 3, 14, 28, 42, 28);
-    graphics.generateTexture("tower-mage", 56, 56);
-}
-
-function textureTowerBarracks(graphics) {
-    graphics.clear();
-    graphics.fillStyle(0x7b5634, 1);
-    graphics.fillRoundedRect(8, 24, 42, 27, 5);
-    graphics.fillStyle(0x4f8b3a, 1);
-    graphics.fillTriangle(5, 26, 29, 6, 53, 26);
-    graphics.fillStyle(0xd6a35a, 1);
-    graphics.fillRect(25, 34, 9, 17);
-    graphics.fillStyle(0xffdf82, 1);
-    graphics.fillRect(14, 30, 9, 8);
-    graphics.lineStyle(3, 0x3e2a1a, 1);
-    graphics.strokeTriangle(5, 26, 29, 6, 53, 26);
-    graphics.generateTexture("tower-barracks", 58, 58);
-}
-
-function textureTowerArtillery(graphics) {
-    graphics.clear();
-    graphics.fillStyle(0x5d5a52, 1);
-    graphics.fillRoundedRect(13, 28, 32, 21, 6);
-    graphics.fillStyle(0x373833, 1);
-    graphics.fillEllipse(30, 26, 34, 20);
-    graphics.fillStyle(0x242620, 1);
-    graphics.fillEllipse(30, 25, 18, 10);
-    graphics.fillStyle(0xffb74d, 1);
-    graphics.fillCircle(39, 19, 5);
-    graphics.lineStyle(3, 0x2a2925, 1);
-    graphics.strokeRoundedRect(13, 28, 32, 21, 6);
-    graphics.generateTexture("tower-artillery", 58, 56);
 }
 
 function textureGuard(graphics) {

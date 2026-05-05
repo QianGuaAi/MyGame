@@ -19,6 +19,21 @@ import { SPECIAL_TOWER_KEYS, TOWER_BUTTON_ORDER, TOWER_TYPES } from "../data/tow
 import { createGameTextures } from "../render/textures.js";
 import { cloneStats, pickRandom } from "../utils/random.js";
 
+const HERO_OUTPOST_OFFSET = 24;
+const HERO_OUTPOST_SPACING = 34;
+const HERO_MOVE_SPEED = 150;
+const HERO_ROAD_CLICK_RADIUS = 40;
+const HERO_RESPAWN_MS = 8000;
+const TOWER_TEXTURE_KEYS = {
+  arrow: "tower-arrow",
+  mage: "tower-mage",
+  barracks: "tower-barracks",
+  artillery: "tower-artillery",
+  frost: "tower-frost",
+  flame: "tower-flame",
+  altar: "tower-altar",
+};
+
 export class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
@@ -38,7 +53,10 @@ export class GameScene extends Phaser.Scene {
     this.unlockedBlueprints = new Set();
     this.blueprintFragments = 0;
     this.selectedBuildType = "arrow";
+    this.pendingBuildType = "arrow";
     this.selectedTower = null;
+    this.selectedHero = null;
+    this.heroMoveMarker = null;
     this.selectedShopHeroId = "tiezhu";
     this.waveActive = false;
     this.gameEnded = false;
@@ -54,6 +72,10 @@ export class GameScene extends Phaser.Scene {
     this.createHeroState();
   }
 
+  preload() {
+    this.loadHeroAssets();
+  }
+
   create() {
     this.createTextures();
     this.createMap();
@@ -61,6 +83,7 @@ export class GameScene extends Phaser.Scene {
     this.createSlots();
     this.createHeroes();
     this.createUi();
+    this.createHeroCommandInput();
     this.updateUi();
   }
 
@@ -79,18 +102,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   createHeroState() {
-    this.heroes = HERO_DEFS.map((def) => {
+    this.heroes = HERO_DEFS.map((def, index) => {
+      const pathProgress = this.getOutpostHeroProgress(index);
+      const start = pointOnPath(pathProgress);
       const hero = {
         ...def,
-        homeX: def.x,
-        homeY: def.y,
-        x: def.x,
-        y: def.y,
+        homeX: start.x,
+        homeY: start.y,
+        x: start.x,
+        y: start.y,
+        pathProgress,
+        targetProgress: pathProgress,
         hp: def.maxHp,
         equipment: { weapon: null, armor: null, offhand: null },
         nextAttackAt: 0,
         nextHealAt: 0,
         dead: false,
+        respawnAt: 0,
       };
 
       this.recalculateHeroStats(hero);
@@ -99,8 +127,25 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  getOutpostHeroProgress(index) {
+    return Phaser.Math.Clamp(PATH_LENGTH - HERO_OUTPOST_OFFSET - index * HERO_OUTPOST_SPACING, 0, PATH_LENGTH);
+  }
+
   createTextures() {
     createGameTextures(this);
+  }
+
+  loadHeroAssets() {
+    this.load.image("hero-tiezhu", new URL("../assets/heroes/tiezhu.png", import.meta.url).href);
+    this.load.image("hero-ergou", new URL("../assets/heroes/ergou.png", import.meta.url).href);
+    this.load.image("hero-yueguang", new URL("../assets/heroes/yueguang.png", import.meta.url).href);
+    this.load.image("tower-arrow", new URL("../assets/towers/arrow.png", import.meta.url).href);
+    this.load.image("tower-mage", new URL("../assets/towers/mage.png", import.meta.url).href);
+    this.load.image("tower-barracks", new URL("../assets/towers/barracks.png", import.meta.url).href);
+    this.load.image("tower-artillery", new URL("../assets/towers/artillery.png", import.meta.url).href);
+    this.load.image("tower-frost", new URL("../assets/towers/frost.png", import.meta.url).href);
+    this.load.image("tower-flame", new URL("../assets/towers/flame.png", import.meta.url).href);
+    this.load.image("tower-altar", new URL("../assets/towers/altar.png", import.meta.url).href);
   }
 
   createMap() {
@@ -269,10 +314,12 @@ export class GameScene extends Phaser.Scene {
 
   createHeroes() {
     this.heroes.forEach((hero) => {
+      const selectionRing = this.add.circle(0, 0, 24, 0xffe28a, 0.18)
+        .setStrokeStyle(3, 0xffd15a, 0.95)
+        .setVisible(false);
       const shadow = this.add.ellipse(0, 16, 34, 10, 0x2f2415, 0.24);
-      const body = this.add.circle(0, 0, 16, hero.color, 1).setStrokeStyle(3, 0x2c2118, 0.8);
-      const head = this.add.circle(0, -17, 8, 0xf1c27d, 1).setStrokeStyle(2, 0x664221, 0.78);
-      const accent = this.add.rectangle(-10, 1, 7, 17, hero.accent, 1);
+      const sprite = this.add.image(0, -10, `hero-${hero.id}`)
+        .setDisplaySize(48, 48);
       const name = this.add.text(0, 25, hero.name, {
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: "12px",
@@ -282,21 +329,127 @@ export class GameScene extends Phaser.Scene {
       }).setOrigin(0.5);
       const hpBack = this.add.rectangle(-22, -31, 44, 5, 0x3b2415, 0.9).setOrigin(0, 0.5);
       const hpFill = this.add.rectangle(-22, -31, 44, 5, 0x4cbe58, 1).setOrigin(0, 0.5);
-      const group = this.add.container(hero.x, hero.y, [shadow, body, head, accent, hpBack, hpFill, name])
+      const group = this.add.container(hero.x, hero.y, [selectionRing, shadow, sprite, hpBack, hpFill, name])
         .setDepth(16)
         .setInteractive(new Phaser.Geom.Circle(0, 0, 28), Phaser.Geom.Circle.Contains);
 
-      group.on("pointerdown", () => {
-        this.selectedShopHeroId = hero.id;
-        this.showNotice(`${hero.name}：${hero.title}`, "#2f4972");
-        this.updateUi();
+      group.on("pointerdown", (pointer, localX, localY, event) => {
+        event?.stopPropagation();
+        this.selectHero(hero);
       });
 
       hero.group = group;
+      hero.sprite = sprite;
       hero.hpFill = hpFill;
       hero.nameLabel = name;
+      hero.selectionRing = selectionRing;
       this.updateHeroSprite(hero);
     });
+  }
+
+  createHeroCommandInput() {
+    this.input.on("pointerdown", (pointer, gameObjects) => {
+      this.handleHeroCommandPointer(pointer, gameObjects);
+    });
+  }
+
+  selectHero(hero) {
+    if (this.gameEnded || this.modalOpen) {
+      return;
+    }
+
+    if (hero.dead) {
+      this.showNotice(`${hero.name} 已倒下`, "#9c2b24");
+      this.updateHeroPortraits();
+      return;
+    }
+
+    this.selectedHero = hero;
+    this.selectedShopHeroId = hero.id;
+    this.selectedTower = null;
+    this.clearSelectedRange();
+    this.updateHeroSelectionVisuals();
+    this.showNotice(`${hero.name}：点道路移动`, "#2f4972");
+    this.updateUi();
+  }
+
+  updateHeroSelectionVisuals() {
+    this.heroes.forEach((hero) => {
+      hero.selectionRing?.setVisible(hero === this.selectedHero && !hero.dead);
+    });
+  }
+
+  handleHeroCommandPointer(pointer, gameObjects = []) {
+    if (!this.selectedHero || this.gameEnded || this.modalOpen) {
+      return;
+    }
+
+    if (gameObjects.length > 0 || pointer.worldX >= PANEL_X) {
+      return;
+    }
+
+    const point = this.getClosestPointOnPath(pointer.worldX, pointer.worldY);
+
+    if (!point || point.distance > HERO_ROAD_CLICK_RADIUS) {
+      this.showNotice("英雄只能走在路上", "#9c2b24");
+      return;
+    }
+
+    this.commandSelectedHero(point);
+  }
+
+  commandSelectedHero(point) {
+    const hero = this.selectedHero;
+
+    if (!hero || hero.dead) {
+      return;
+    }
+
+    hero.targetProgress = point.progress;
+    this.showHeroMoveMarker(point.x, point.y, hero.accent);
+    this.showNotice(`${hero.name} 移动`, "#315c22");
+  }
+
+  showHeroMoveMarker(x, y, color) {
+    this.heroMoveMarker?.destroy();
+    this.heroMoveMarker = this.add.circle(x, y, 12, color, 0.22)
+      .setStrokeStyle(3, color, 0.92)
+      .setDepth(15);
+    this.tweens.add({
+      targets: this.heroMoveMarker,
+      alpha: 0,
+      scale: 1.55,
+      duration: 520,
+      onComplete: () => {
+        this.heroMoveMarker?.destroy();
+        this.heroMoveMarker = null;
+      },
+    });
+  }
+
+  getClosestPointOnPath(x, y) {
+    return PATH_SEGMENTS.reduce((best, segment) => {
+      const dx = segment.to.x - segment.from.x;
+      const dy = segment.to.y - segment.from.y;
+      const lengthSq = dx * dx + dy * dy;
+      const t = lengthSq === 0
+        ? 0
+        : Phaser.Math.Clamp(((x - segment.from.x) * dx + (y - segment.from.y) * dy) / lengthSq, 0, 1);
+      const pathX = Phaser.Math.Linear(segment.from.x, segment.to.x, t);
+      const pathY = Phaser.Math.Linear(segment.from.y, segment.to.y, t);
+      const distance = Phaser.Math.Distance.Between(x, y, pathX, pathY);
+
+      if (distance >= best.distance) {
+        return best;
+      }
+
+      return {
+        x: pathX,
+        y: pathY,
+        distance,
+        progress: segment.start + segment.length * t,
+      };
+    }, { distance: Infinity, progress: 0, x: 0, y: 0 });
   }
 
   createUi() {
@@ -317,6 +470,8 @@ export class GameScene extends Phaser.Scene {
       color: "#6d2e18",
       align: "center",
     }).setOrigin(0.5).setDepth(30).setAlpha(0);
+
+    this.createHeroPortraits();
 
     this.add.text(PANEL_X + 24, 24, "王冠前哨", {
       ...TEXT_STYLE,
@@ -408,6 +563,43 @@ export class GameScene extends Phaser.Scene {
     this.restartButton.setDepth(82).setVisible(false);
   }
 
+  createHeroPortraits() {
+    this.heroPortraits = this.heroes.map((hero, index) => {
+      const x = 18 + index * 86;
+      const y = GAME_HEIGHT - 66;
+      const bg = this.add.rectangle(0, 0, 78, 58, 0xf6e2a9, 0.95)
+        .setOrigin(0)
+        .setStrokeStyle(3, 0x7a4b25, 0.95);
+      const portraitImage = this.add.image(22, 28, `hero-${hero.id}`)
+        .setDisplaySize(42, 42);
+      const name = this.add.text(42, 9, hero.name.slice(1), {
+        ...TEXT_STYLE,
+        fontSize: "12px",
+        color: "#2b1c10",
+      });
+      const hp = this.add.text(42, 29, "", {
+        ...TEXT_STYLE,
+        fontSize: "12px",
+        color: "#315c22",
+      });
+      const container = this.add.container(x, y, [bg, portraitImage, name, hp])
+        .setDepth(35)
+        .setSize(78, 58)
+        .setInteractive(new Phaser.Geom.Rectangle(0, 0, 78, 58), Phaser.Geom.Rectangle.Contains);
+
+      container.on("pointerdown", (pointer, localX, localY, event) => {
+        event?.stopPropagation();
+        this.selectHero(hero);
+      });
+
+      const portrait = { hero, container, bg, portraitImage, name, hp };
+      hero.portrait = portrait;
+      return portrait;
+    });
+
+    this.updateHeroPortraits();
+  }
+
   createButton(x, y, width, height, label, onClick, options = {}) {
     const fill = options.fill ?? 0xe7c980;
     const hoverFill = options.hoverFill ?? 0xf0d894;
@@ -469,7 +661,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.selectedBuildType = key;
+    this.pendingBuildType = key;
     this.selectedTower = null;
+    this.selectedHero = null;
+    this.updateHeroSelectionVisuals();
     this.clearSelectedRange();
     this.updateUi();
   }
@@ -484,13 +679,23 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.buildTower(slot, this.selectedBuildType);
+    this.buildTower(slot, this.getPendingBuildType());
+  }
+
+  getPendingBuildType() {
+    const typeKey = this.pendingBuildType || this.selectedBuildType || "arrow";
+    return TOWER_TYPES[typeKey] ? typeKey : "arrow";
+  }
+
+  getTowerTextureKey(typeKey) {
+    return TOWER_TEXTURE_KEYS[typeKey] ?? TOWER_TYPES[typeKey]?.texture ?? TOWER_TEXTURE_KEYS.arrow;
   }
 
   buildTower(slot, typeKey) {
-    const type = TOWER_TYPES[typeKey];
+    const safeTypeKey = TOWER_TYPES[typeKey] ? typeKey : "arrow";
+    const type = TOWER_TYPES[safeTypeKey];
 
-    if (!this.isTowerUnlocked(typeKey)) {
+    if (!this.isTowerUnlocked(safeTypeKey)) {
       this.showNotice(`${type.name} 需要特殊塔图纸`, "#9c2b24");
       return;
     }
@@ -503,7 +708,11 @@ export class GameScene extends Phaser.Scene {
 
     this.gold -= type.price;
     const shadow = this.add.ellipse(slot.x, slot.y + 19, 48, 14, 0x2f2415, 0.22).setDepth(7);
-    const sprite = this.add.image(slot.x, slot.y - 12, type.texture).setDepth(9).setInteractive({ useHandCursor: true });
+    const textureKey = this.getTowerTextureKey(safeTypeKey);
+    const sprite = this.add.image(slot.x, slot.y - 14, textureKey)
+      .setDisplaySize(66, 66)
+      .setDepth(9)
+      .setInteractive({ useHandCursor: true });
     const levelText = this.add.text(slot.x + 22, slot.y + 20, "I", {
       fontFamily: "Inter, system-ui, sans-serif",
       fontSize: "13px",
@@ -513,7 +722,8 @@ export class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(11);
     const tower = {
       slot,
-      typeKey,
+      typeKey: safeTypeKey,
+      textureKey,
       level: 1,
       branch: null,
       x: slot.x,
@@ -524,10 +734,10 @@ export class GameScene extends Phaser.Scene {
       guards: [],
       totalCost: type.price,
       nextFireAt: 0,
-      ...this.getTowerStats(typeKey, 1, null),
+      ...this.getTowerStats(safeTypeKey, 1, null),
     };
 
-    if (typeKey === "barracks") {
+    if (safeTypeKey === "barracks") {
       tower.guards = this.createTowerGuards(tower);
     }
 
@@ -609,6 +819,8 @@ export class GameScene extends Phaser.Scene {
 
   selectTower(tower) {
     this.selectedTower = tower;
+    this.selectedHero = null;
+    this.updateHeroSelectionVisuals();
     this.clearSelectedRange();
     this.selectedRange = this.add.circle(tower.x, tower.y, tower.range, 0xffffff, 0)
       .setStrokeStyle(3, TOWER_TYPES[tower.typeKey].color, 0.42)
@@ -626,7 +838,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const type = TOWER_TYPES[this.selectedBuildType];
+    const type = TOWER_TYPES[this.getPendingBuildType()];
     slot.platform.setStrokeStyle(4, type.color, 0.95);
     this.hoverRange?.destroy();
     this.hoverRange = this.add.circle(slot.x, slot.y, type.range, 0xffffff, 0)
@@ -1348,6 +1560,7 @@ export class GameScene extends Phaser.Scene {
 
     this.heroes.forEach((hero) => {
       if (hero.dead) {
+        this.updateHeroRespawn(hero, time);
         return;
       }
 
@@ -1355,31 +1568,55 @@ export class GameScene extends Phaser.Scene {
         hero.hp = Math.min(hero.stats.maxHp, hero.hp + hero.stats.regen * dt);
       }
 
+      this.updateHeroMovement(hero, dt);
       this.updateHeroSupport(hero, time);
       const target = this.findHeroTarget(hero);
 
-      if (target) {
-        const targetX = target.sprite.x;
-        const targetY = target.sprite.y;
-        const distance = Phaser.Math.Distance.Between(hero.x, hero.y, targetX, targetY);
-        const attackDistance = hero.stats.ranged ? hero.stats.range : Math.min(hero.stats.range, 48);
-
-        if (distance > attackDistance) {
-          const angle = Phaser.Math.Angle.Between(hero.x, hero.y, targetX, targetY);
-          hero.x += Math.cos(angle) * 110 * dt;
-          hero.y += Math.sin(angle) * 110 * dt;
-        } else if (time >= hero.nextAttackAt) {
-          this.heroAttack(hero, target, time);
-        }
-      } else {
-        hero.x = Phaser.Math.Linear(hero.x, hero.homeX, 0.06);
-        hero.y = Phaser.Math.Linear(hero.y, hero.homeY, 0.06);
+      if (target && time >= hero.nextAttackAt) {
+        this.heroAttack(hero, target, time);
       }
 
       this.updateHeroSprite(hero);
     });
 
+    this.updateHeroPortraits(time);
     this.updateEnemyAttacks(time);
+  }
+
+  updateHeroRespawn(hero, time) {
+    if (hero.respawnAt <= 0 || time < hero.respawnAt) {
+      return;
+    }
+
+    hero.dead = false;
+    hero.respawnAt = 0;
+    hero.hp = Math.max(1, Math.round(hero.stats.maxHp * 0.45));
+    hero.group?.setAlpha(1);
+    this.addFloatingText(hero.x, hero.y - 18, "复活", "#315c22");
+    this.updateHeroSprite(hero);
+    this.updateHeroSelectionVisuals();
+    this.updateUi();
+  }
+
+  updateHeroMovement(hero, dt) {
+    if (typeof hero.pathProgress !== "number") {
+      const point = this.getClosestPointOnPath(hero.x, hero.y);
+      hero.pathProgress = point.progress;
+      hero.targetProgress = point.progress;
+    }
+
+    const remaining = hero.targetProgress - hero.pathProgress;
+
+    if (Math.abs(remaining) <= 0.5) {
+      hero.pathProgress = hero.targetProgress;
+    } else {
+      const step = Math.min(Math.abs(remaining), HERO_MOVE_SPEED * dt) * Math.sign(remaining);
+      hero.pathProgress += step;
+    }
+
+    const point = pointOnPath(hero.pathProgress);
+    hero.x = point.x;
+    hero.y = point.y;
   }
 
   updateHeroSupport(hero, time) {
@@ -1404,7 +1641,16 @@ export class GameScene extends Phaser.Scene {
   findHeroTarget(hero) {
     return this.enemies
       .filter((enemy) => enemy.alive && Phaser.Math.Distance.Between(hero.x, hero.y, enemy.sprite.x, enemy.sprite.y) <= hero.stats.range)
-      .sort((a, b) => b.progress - a.progress)[0];
+      .sort((a, b) => {
+        const frontPostPriority = b.progress - a.progress;
+
+        if (frontPostPriority !== 0) {
+          return frontPostPriority;
+        }
+
+        return Phaser.Math.Distance.Between(hero.x, hero.y, a.sprite.x, a.sprite.y)
+          - Phaser.Math.Distance.Between(hero.x, hero.y, b.sprite.x, b.sprite.y);
+      })[0];
   }
 
   heroAttack(hero, target, time) {
@@ -1474,7 +1720,12 @@ export class GameScene extends Phaser.Scene {
     if (hero.hp <= 0) {
       hero.hp = 0;
       hero.dead = true;
+      hero.respawnAt = this.time.now + HERO_RESPAWN_MS;
       hero.group.setAlpha(0.42);
+      if (this.selectedHero === hero) {
+        this.selectedHero = null;
+        this.updateHeroSelectionVisuals();
+      }
       this.addFloatingText(hero.x, hero.y - 16, "倒下", "#9c2b24");
     }
 
@@ -1485,10 +1736,13 @@ export class GameScene extends Phaser.Scene {
   recoverHeroes(ratio) {
     this.heroes.forEach((hero) => {
       hero.dead = false;
+      hero.respawnAt = 0;
       hero.group?.setAlpha(1);
       hero.hp = Math.min(hero.stats.maxHp, Math.max(hero.hp, hero.stats.maxHp * ratio));
       this.updateHeroSprite(hero);
     });
+    this.updateHeroSelectionVisuals();
+    this.updateHeroPortraits();
   }
 
   updateHeroSprite(hero) {
@@ -1497,8 +1751,33 @@ export class GameScene extends Phaser.Scene {
     }
 
     hero.group.setPosition(hero.x, hero.y);
+    hero.sprite?.setTint(hero.dead ? 0x777777 : 0xffffff);
     hero.hpFill.setDisplaySize(44 * Phaser.Math.Clamp(hero.hp / hero.stats.maxHp, 0, 1), 5);
     hero.nameLabel.setText(`${hero.name}`);
+  }
+
+  updateHeroPortraits(time = this.time?.now ?? 0) {
+    if (!this.heroPortraits) {
+      return;
+    }
+
+    this.heroPortraits.forEach((portrait) => {
+      const hero = portrait.hero;
+      const selected = hero === this.selectedHero && !hero.dead;
+
+      portrait.bg.setFillStyle(hero.dead ? 0xd4cec0 : 0xf6e2a9, 0.95);
+      portrait.bg.setStrokeStyle(3, selected ? 0xffd15a : 0x7a4b25, 0.95);
+      portrait.portraitImage.setTint(hero.dead ? 0x777777 : 0xffffff);
+      portrait.portraitImage.setAlpha(hero.dead ? 0.62 : 1);
+      portrait.name.setColor(hero.dead ? "#6d665c" : "#2b1c10");
+
+      if (hero.dead) {
+        const seconds = Math.max(0, Math.ceil((hero.respawnAt - time) / 1000));
+        portrait.hp.setText(`复活 ${seconds}s`).setColor("#6d665c");
+      } else {
+        portrait.hp.setText(`${Math.ceil(hero.hp)}/${hero.stats.maxHp}`).setColor("#315c22");
+      }
+    });
   }
 
   updateHeroEffects(delta) {
@@ -1879,12 +2158,19 @@ export class GameScene extends Phaser.Scene {
     this.gameEnded = true;
     this.bestWave = TOTAL_WAVES;
     localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
-    this.endOverlay.setVisible(true);
-    this.centerText.setText(`前哨守住了\n完成 ${TOTAL_WAVES}/${TOTAL_WAVES} 波\n得分 ${this.score}`);
-    this.centerText.setVisible(true);
-    this.restartButton.setVisible(true);
-    this.showNotice("所有怪兽波次已清空", "#315c22");
+    localStorage.setItem("crown-outpost-last-score", String(this.score));
+    localStorage.setItem("crown-outpost-chapter-1-level-1-complete", "true");
+    this.waveActive = false;
+    this.showNotice("第一关完成，返回章节地图", "#315c22");
     this.updateUi();
+    this.cameras.main.fadeOut(420, 32, 21, 13);
+    this.time.delayedCall(440, () => {
+      this.scene.start("CampaignScene", {
+        completedLevelId: "chapter-1-level-1",
+        gold: this.gold,
+        score: this.score,
+      });
+    });
   }
 
   showNotice(message, color) {
@@ -1918,6 +2204,7 @@ export class GameScene extends Phaser.Scene {
 
     this.setButtonEnabled(this.startButton, !this.waveActive && !this.gameEnded && !this.modalOpen && this.wave < TOTAL_WAVES);
     this.setButtonLabel(this.inventoryButton, `背包 ${this.inventory.length}`);
+    this.updateHeroPortraits();
     this.updateTowerButtons();
     this.updateSelectionPanel();
   }
@@ -1932,7 +2219,7 @@ export class GameScene extends Phaser.Scene {
 
   updateTowerButtons() {
     this.towerButtons.forEach(({ key, button, icon }) => {
-      const selected = key === this.selectedBuildType && !this.selectedTower;
+      const selected = key === this.getPendingBuildType() && !this.selectedTower;
       const unlocked = this.isTowerUnlocked(key);
       const tower = TOWER_TYPES[key];
       button.selected = selected;
@@ -1946,9 +2233,10 @@ export class GameScene extends Phaser.Scene {
 
   updateSelectionPanel() {
     if (!this.selectedTower) {
-      const type = TOWER_TYPES[this.selectedBuildType];
-      const unlocked = this.isTowerUnlocked(this.selectedBuildType);
-      const previewStats = this.getTowerStats(this.selectedBuildType, 1, null);
+      const typeKey = this.getPendingBuildType();
+      const type = TOWER_TYPES[typeKey];
+      const unlocked = this.isTowerUnlocked(typeKey);
+      const previewStats = this.getTowerStats(typeKey, 1, null);
       this.selectionText.setText(
         `${type.name}\n${unlocked ? type.description : "需要特殊塔图纸"}\n花费 ${type.price}\n伤害 ${previewStats.damage}\n射程 ${previewStats.range}\n攻速 ${(1000 / previewStats.rate).toFixed(1)}/秒`,
       );
@@ -1973,4 +2261,3 @@ export class GameScene extends Phaser.Scene {
     this.setButtonEnabled(this.sellButton, true);
   }
 }
-

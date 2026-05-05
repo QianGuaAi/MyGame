@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import "./styles.css";
 import { GAME_HEIGHT, GAME_WIDTH } from "./data/map.js";
+import { CampaignScene } from "./scenes/CampaignScene.js";
 import { GameScene } from "./scenes/GameScene.js";
 
 const config = {
@@ -13,7 +14,7 @@ const config = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: GameScene,
+  scene: [GameScene, CampaignScene],
 };
 
 new Phaser.Game(config);

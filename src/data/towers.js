@@ -85,7 +85,7 @@ export const TOWER_TYPES = {
     slowMs: 1200,
     color: 0x5ca7d8,
     accent: 0xdbf7ff,
-    texture: "tower-mage",
+    texture: "tower-frost",
     projectile: "orb",
     description: "特殊图纸，范围减速",
     blueprintKey: "frost",
@@ -102,7 +102,7 @@ export const TOWER_TYPES = {
     burnDps: 14,
     color: 0xd95f32,
     accent: 0xffd48a,
-    texture: "tower-artillery",
+    texture: "tower-flame",
     projectile: "flame",
     description: "特殊图纸，灼烧小群",
     blueprintKey: "flame",
@@ -117,7 +117,7 @@ export const TOWER_TYPES = {
     buffRate: 0.82,
     color: 0x2f8a78,
     accent: 0xd2fff4,
-    texture: "tower-barracks",
+    texture: "tower-altar",
     projectile: "buff",
     description: "特殊图纸，附近塔攻速提升",
     blueprintKey: "altar",
@@ -126,4 +126,3 @@ export const TOWER_TYPES = {
 
 export const TOWER_BUTTON_ORDER = ["arrow", "mage", "barracks", "artillery", "frost", "flame", "altar"];
 export const SPECIAL_TOWER_KEYS = ["frost", "flame", "altar"];
-
