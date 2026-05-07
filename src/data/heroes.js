@@ -51,4 +51,3 @@ export const HERO_DEFS = [
     slowFactor: 0.78,
   },
 ];
-

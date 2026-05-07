@@ -1,0 +1,400 @@
+[2m20:37:31[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this.togglePause is not a function
+[39m > pauseButton.createButton.fill src/scenes/GameScene.js?t=1778157445293:533:84
+ > Container.<anonymous> src/scenes/GameScene.js?t=1778157445293:696:9
+ > Container.emit node_modules/phaser/dist/phaser.js:201:34
+ > InputPlugin.processDownEvents node_modules/phaser/dist/phaser.js:105101:23
+ > InputPlugin.update node_modules/phaser/dist/phaser.js:104807:34
+ > InputManager.updateInputPlugins node_modules/phaser/dist/phaser.js:103486:46
+ > InputManager.onMouseDown node_modules/phaser/dist/phaser.js:103687:13
+ > HTMLCanvasElement.onMouseDown node_modules/phaser/dist/phaser.js:117416:24
+
+[2m22:12:42[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1765:38
+[33m  1808 |      const oldItem = hero.equipment[item.slot];
+  1809 |      if (oldItem) {
+  1810 |        this.inventory.push(oldItem);
+       |        ^
+  1811 |      }
+  1812 |  [39m
+[2m22:12:42[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1765:38
+[33m  1808 |      const oldItem = hero.equipment[item.slot];
+  1809 |      if (oldItem) {
+  1810 |        this.inventory.push(oldItem);
+       |        ^
+  1811 |      }
+  1812 |  [39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:12:57[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+  1813 |      if (oldItem) {
+       |            ^
+  1814 |        this.inventory.push(oldItem);
+  1815 |      }[39m
+[2m22:12:57[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+  1813 |      if (oldItem) {
+       |            ^
+  1814 |        this.inventory.push(oldItem);
+  1815 |      }[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:13:21[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+  1813 |      if (oldItem) {
+       |            ^
+  1814 |        this.inventory.push(oldItem);
+  1815 |      }[39m
+[2m22:13:21[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+  1813 |      if (oldItem) {
+       |            ^
+  1814 |        this.inventory.push(oldItem);
+  1815 |      }[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:14:32[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:655:44
+[33m  667 |          color: "#3a2816",
+  668 |          hoverFill: 0xf0d894,
+  669 |        });
+      |       ^
+  670 |        const icon = this.add.circle(PANEL_X + 36, y, 7, tower.color, 1)
+  671 |          .setStrokeStyle(2, 0x5c3218, 0.68)[39m
+[2m22:14:32[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:655:44
+[33m  667 |          color: "#3a2816",
+  668 |          hoverFill: 0xf0d894,
+  669 |        });
+      |       ^
+  670 |        const icon = this.add.circle(PANEL_X + 36, y, 7, tower.color, 1)
+  671 |          .setStrokeStyle(2, 0x5c3218, 0.68)[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:15:41[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:709:128
+[33m  724 |          .setStrokeStyle(3, 0x7a4b25, 0.95);
+  725 |        const portraitImage = this.add.image(22, 28, `hero-${hero.id}`)
+  726 |          .setDisplaySize(42, 42);
+      |    ^
+  727 |        const name = this.add.text(48, 9, hero.name.slice(1), {
+  728 |          ...TEXT_STYLE,[39m
+[2m22:15:41[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:709:128
+[33m  724 |          .setStrokeStyle(3, 0x7a4b25, 0.95);
+  725 |        const portraitImage = this.add.image(22, 28, `hero-${hero.id}`)
+  726 |          .setDisplaySize(42, 42);
+      |    ^
+  727 |        const name = this.add.text(48, 9, hero.name.slice(1), {
+  728 |          ...TEXT_STYLE,[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:15:55[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:709:128
+[33m  724 |          .setStrokeStyle(3, 0x7a4b25, 0.95);
+  725 |        const portraitImage = this.add.image(22, 28, `hero-${hero.id}`)
+  726 |          .setDisplaySize(42, 42);
+      |    ^
+  727 |        const name = this.add.text(48, 9, hero.name.slice(1), {
+  728 |          ...TEXT_STYLE,[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:16:27[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:821:43
+[33m  847 |      }
+  848 |  
+  849 |      this.buildTower(slot, this.getPendingBuildType());
+      |                                        ^
+  850 |    }
+  851 |  [39m
+[2m22:16:27[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:821:43
+[33m  847 |      }
+  848 |  
+  849 |      this.buildTower(slot, this.getPendingBuildType());
+      |                                        ^
+  850 |    }
+  851 |  [39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:16:54[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:821:43
+[33m  847 |      }
+  848 |  
+  849 |      this.buildTower(slot, this.getPendingBuildType());
+      |                                        ^
+  850 |    }
+  851 |  [39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:17:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+  1813 |      if (oldItem) {
+       |   ^
+  1814 |        this.inventory.push(oldItem);
+  1815 |      }[39m
+[2m22:17:10[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+  1813 |      if (oldItem) {
+       |   ^
+  1814 |        this.inventory.push(oldItem);
+  1815 |      }[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:18:11[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2459:77
+[33m  2509 |  
+  2510 |    renderMerchant() {
+  2511 |      const merchant = this.currentMerchant;
+       |                           ^
+  2512 |      const title = merchant.kind === "elite" ? "绮捐嫳鍟嗕汉" : "閲庣敓鍟嗕汉";
+  2513 |      const subtitle = merchant.kind === "elite"[39m
+[2m22:18:11[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2459:77
+[33m  2509 |  
+  2510 |    renderMerchant() {
+  2511 |      const merchant = this.currentMerchant;
+       |                           ^
+  2512 |      const title = merchant.kind === "elite" ? "绮捐嫳鍟嗕汉" : "閲庣敓鍟嗕汉";
+  2513 |      const subtitle = merchant.kind === "elite"[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:19:11[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1810 |      }
+  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+       |                                         ^
+  1813 |      if (oldItem) {
+  1814 |        this.inventory.push(oldItem);[39m
+[2m22:19:11[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:1769:38
+[33m  1810 |      }
+  1811 |  
+  1812 |      const oldItem = hero.equipment[item.slot];
+       |                                         ^
+  1813 |      if (oldItem) {
+  1814 |        this.inventory.push(oldItem);[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:20:38[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2339:76
+[33m  2391 |  
+  2392 |      this.renderHeroPicker(128);
+  2393 |      this.addModalText(164, 156, `褰撳墠锛?{hero.name}  鍔涢噺 ${hero.strength}\n${this.getHeroEquipmentSummary(hero)}`, 14, ...
+       |                                                    ^
+  2394 |  
+  2395 |      if (this.inventory.length === 0) {[39m
+[2m22:20:38[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2339:76
+[33m  2391 |  
+  2392 |      this.renderHeroPicker(128);
+  2393 |      this.addModalText(164, 156, `褰撳墠锛?{hero.name}  鍔涢噺 ${hero.strength}\n${this.getHeroEquipmentSummary(hero)}`, 14, ...
+       |                                                    ^
+  2394 |  
+  2395 |      if (this.inventory.length === 0) {[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:20:56[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2339:76
+[33m  2391 |  
+  2392 |      this.renderHeroPicker(128);
+  2393 |      this.addModalText(164, 156, `褰撳墠锛?{hero.name}  鍔涢噺 ${hero.strength}\n${this.getHeroEquipmentSummary(hero)}`, 14, ...
+       |                                                   ^
+  2394 |  
+  2395 |      if (this.inventory.length === 0) {[39m
+[2m22:20:56[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2339:76
+[33m  2391 |  
+  2392 |      this.renderHeroPicker(128);
+  2393 |      this.addModalText(164, 156, `褰撳墠锛?{hero.name}  鍔涢噺 ${hero.strength}\n${this.getHeroEquipmentSummary(hero)}`, 14, ...
+       |                                                   ^
+  2394 |  
+  2395 |      if (this.inventory.length === 0) {[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:22:07[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2459:77
+[33m  2510 |    renderMerchant() {
+  2511 |      const merchant = this.currentMerchant;
+  2512 |      const title = merchant.kind === "elite" ? "绮捐嫳鍟嗕汉" : "閲庣敓鍟嗕汉";
+       |                            ^
+  2513 |      const subtitle = merchant.kind === "elite"
+  2514 |        ? `绔犺妭鏈€鍚庡嚭鐜般€傚彧鑳借喘涔?2 涓晢鍝侊紝蹇呭畾鏈夌壒娈婂鍥剧焊銆傚凡涔?${merchant.purchases}/${merchant.limit}`[39m
+[2m22:22:07[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2459:77
+[33m  2510 |    renderMerchant() {
+  2511 |      const merchant = this.currentMerchant;
+  2512 |      const title = merchant.kind === "elite" ? "绮捐嫳鍟嗕汉" : "閲庣敓鍟嗕汉";
+       |                            ^
+  2513 |      const subtitle = merchant.kind === "elite"
+  2514 |        ? `绔犺妭鏈€鍚庡嚭鐜般€傚彧鑳借喘涔?2 涓晢鍝侊紝蹇呭畾鏈夌壒娈婂鍥剧焊銆傚凡涔?${merchant.purchases}/${merchant.limit}`[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:22:46[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2515:46
+[33m  2566 |        } else {
+  2567 |          this.gold += 80;
+  2568 |          this.showNotice("鐗规畩濉斿凡鍏ㄨВ閿侊細閲戝竵 +80", "#315c22");
+       |                                                         ^
+  2569 |        }
+  2570 |      } else if (good.kind === "heal") {[39m
+[2m22:22:46[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2515:46
+[33m  2566 |        } else {
+  2567 |          this.gold += 80;
+  2568 |          this.showNotice("鐗规畩濉斿凡鍏ㄨВ閿侊細閲戝竵 +80", "#315c22");
+       |                                                         ^
+  2569 |        }
+  2570 |      } else if (good.kind === "heal") {[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:23:28[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2572:48
+[33m  2640 |    addModalText(x, y, text, size, color, width) {
+  2641 |      const label = this.add.text(x, y, text, {
+  2642 |        fontFamily: "Inter, system-ui, sans-serif",
+       |                          ^
+  2643 |        fontSize: `${size}px`,
+  2644 |        color,[39m
+[2m22:23:28[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2572:48
+[33m  2640 |    addModalText(x, y, text, size, color, width) {
+  2641 |      const label = this.add.text(x, y, text, {
+  2642 |        fontFamily: "Inter, system-ui, sans-serif",
+       |                          ^
+  2643 |        fontSize: `${size}px`,
+  2644 |        color,[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m22:24:38[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2727:54
+[33m  2770 |        const previewStats = this.getTowerStats(typeKey, 1, null);
+  2771 |        this.selectionText.setText(
+  2772 |  ...Stats.range}\n鏀婚€?${(1000 / previewStats.rate).toFixed(1)}/绉抈,
+       |                                                                 ^
+  2773 |        );
+  2774 |        this.upgradeButton.setVisible(false);[39m
+[2m22:24:38[22m [31m[1m[vite][22m[39m [31mInternal server error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.[39m
+  Plugin: [35mvite:import-analysis[39m
+  File: [36mE:/MyGame/src/scenes/GameScene.js[39m:2727:54
+[33m  2770 |        const previewStats = this.getTowerStats(typeKey, 1, null);
+  2771 |        this.selectionText.setText(
+  2772 |  ...Stats.range}\n鏀婚€?${(1000 / previewStats.rate).toFixed(1)}/绉抈,
+       |                                                                 ^
+  2773 |        );
+  2774 |        this.upgradeButton.setVisible(false);[39m
+      at TransformPluginContext._formatLog (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30375:39)
+      at TransformPluginContext.error (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30372:14)
+      at TransformPluginContext.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:27618:10)
+      at async EnvironmentPluginContainer.transform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:30164:14)
+      at async loadAndTransform (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/MyGame/node_modules/vite/dist/node/chunks/node.js:24306:20)

@@ -84,4 +84,3 @@ export const RARITY_CONFIG = {
   史诗: { multiplier: 1.7, prefix: "英勇", color: "#7d4acb", tint: 0xd6bbff },
   传说: { multiplier: 2.15, prefix: "传说", color: "#a86610", tint: 0xffcf70 },
 };
-

@@ -8,6 +8,7 @@ export function createGameTextures(scene) {
   textureTree(graphics);
   textureRock(graphics);
   textureShrub(graphics);
+  textureDirtRoad(graphics);
 
   graphics.destroy();
 }
@@ -100,4 +101,45 @@ function textureShrub(graphics) {
     graphics.fillStyle(0xffd166, 0.95);
     graphics.fillCircle(26, 12, 2);
     graphics.generateTexture("shrub", 46, 34);
+}
+
+function textureDirtRoad(graphics) {
+    graphics.clear();
+    graphics.fillStyle(0xa87542, 1);
+    graphics.fillRect(0, 0, 64, 64);
+
+    graphics.fillStyle(0xc0925d, 0.58);
+    graphics.fillEllipse(15, 9, 24, 8);
+    graphics.fillEllipse(48, 27, 28, 10);
+    graphics.fillEllipse(22, 51, 30, 10);
+    graphics.fillEllipse(56, 7, 16, 5);
+
+    graphics.fillStyle(0x76512f, 0.38);
+    graphics.fillEllipse(6, 34, 20, 7);
+    graphics.fillEllipse(38, 6, 16, 5);
+    graphics.fillEllipse(58, 54, 22, 7);
+    graphics.fillEllipse(28, 32, 12, 4);
+
+    graphics.fillStyle(0x57402a, 0.28);
+    graphics.fillCircle(10, 16, 2);
+    graphics.fillCircle(32, 22, 1.5);
+    graphics.fillCircle(50, 43, 2);
+    graphics.fillCircle(18, 58, 1.5);
+    graphics.fillCircle(60, 18, 1.5);
+
+    graphics.lineStyle(3, 0x6e4c2e, 0.24);
+    graphics.lineBetween(0, 18, 18, 15);
+    graphics.lineBetween(26, 17, 46, 14);
+    graphics.lineBetween(52, 15, 64, 17);
+    graphics.lineBetween(0, 45, 14, 47);
+    graphics.lineBetween(22, 48, 44, 50);
+    graphics.lineBetween(50, 49, 64, 47);
+
+    graphics.lineStyle(1, 0xd4ad78, 0.22);
+    graphics.lineBetween(2, 25, 20, 23);
+    graphics.lineBetween(31, 22, 55, 24);
+    graphics.lineBetween(3, 39, 17, 41);
+    graphics.lineBetween(27, 40, 62, 39);
+
+    graphics.generateTexture("dirt-road", 64, 64);
 }

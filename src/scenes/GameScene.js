@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+﻿import Phaser from "phaser";
 import { EASTER_EGGS } from "../data/easterEggs.js";
 import { BASIC_SHOP_ITEMS, EQUIPMENT_CATALOG, RARITY_CONFIG } from "../data/equipment.js";
 import { HERO_DEFS } from "../data/heroes.js";
@@ -25,6 +25,8 @@ const HERO_MOVE_SPEED = 150;
 const HERO_RESPAWN_MS = 8000;
 const HERO_ULTIMATE_ATTACKS = 5;
 const HERO_COLLISION_RADIUS = 18;
+const HERO_FIELD_SIZE = 34;
+const TOWER_DISPLAY_SIZE_BY_LEVEL = [62, 66, 69, 72];
 const TOWER_TEXTURE_KEYS = {
   arrow: "tower-arrow",
   mage: "tower-mage",
@@ -64,6 +66,7 @@ export class GameScene extends Phaser.Scene {
     this.prepCountdown = 0;
     this.prepInitialDuration = 0;
     this.gameEnded = false;
+    this.paused = false;
     this.modalOpen = false;
     this.modalObjects = [];
     this.currentMerchant = null;
@@ -93,7 +96,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    if (this.gameEnded || this.modalOpen) {
+    if (this.gameEnded || this.modalOpen || this.paused) {
       return;
     }
 
@@ -204,15 +207,20 @@ export class GameScene extends Phaser.Scene {
   drawPath() {
     const graphics = this.add.graphics();
 
-    this.strokePath(graphics, 70, 0x4c3720, 0.45);
-    this.strokePath(graphics, 56, 0x8a6230, 1);
-    this.strokePath(graphics, 44, 0xc9964b, 1);
-    this.strokePath(graphics, 4, 0xf6cf74, 0.65);
+    this.strokePath(graphics, 70, 0x5f4a2f, 0.28);
+    this.strokePath(graphics, 58, 0x7d633b, 0.62);
+    this.drawDirtRoadTexture(44);
+    this.drawRaggedRoadEdges(graphics, 44);
 
-    graphics.fillStyle(0xe6b660, 0.95);
-    PATH_POINTS.forEach(([x, y]) => graphics.fillCircle(x, y, 20));
+    graphics.lineStyle(4, 0x6f4b2d, 0.28);
+    PATH_SEGMENTS.forEach((segment) => {
+      const offset = segment.angle === 0 || Math.abs(segment.angle) === Math.PI ? 12 : 0;
+      const sideOffset = segment.angle === Math.PI / 2 || segment.angle === -Math.PI / 2 ? 12 : 0;
+      graphics.lineBetween(segment.from.x + sideOffset, segment.from.y + offset, segment.to.x + sideOffset, segment.to.y + offset);
+      graphics.lineBetween(segment.from.x - sideOffset, segment.from.y - offset, segment.to.x - sideOffset, segment.to.y - offset);
+    });
 
-    graphics.fillStyle(0x7a5328, 0.28);
+    graphics.fillStyle(0x5f4329, 0.24);
     PATH_SEGMENTS.forEach((segment) => {
       const count = Math.max(2, Math.floor(segment.length / 70));
 
@@ -223,6 +231,89 @@ export class GameScene extends Phaser.Scene {
         graphics.fillEllipse(x, y, 18, 7);
       }
     });
+
+    graphics.fillStyle(0x6f9d4f, 0.32);
+    PATH_SEGMENTS.forEach((segment) => {
+      const count = Math.max(2, Math.floor(segment.length / 84));
+      const horizontal = Math.abs(segment.to.y - segment.from.y) < 1;
+
+      for (let i = 0; i < count; i += 1) {
+        const t = (i + 0.28) / count;
+        const baseX = Phaser.Math.Linear(segment.from.x, segment.to.x, t);
+        const baseY = Phaser.Math.Linear(segment.from.y, segment.to.y, t);
+        const side = i % 2 === 0 ? -1 : 1;
+        const x = baseX + (horizontal ? 0 : side * 27);
+        const y = baseY + (horizontal ? side * 27 : 0);
+        graphics.fillEllipse(x, y, 18, 6);
+      }
+    });
+  }
+
+  drawRaggedRoadEdges(graphics, width) {
+    PATH_SEGMENTS.forEach((segment, segmentIndex) => {
+      const horizontal = Math.abs(segment.to.y - segment.from.y) < 1;
+      const count = Math.max(4, Math.floor(segment.length / 30));
+
+      for (let i = 0; i < count; i += 1) {
+        const t = (i + 0.18 + (segmentIndex % 3) * 0.08) / count;
+        const baseX = Phaser.Math.Linear(segment.from.x, segment.to.x, t);
+        const baseY = Phaser.Math.Linear(segment.from.y, segment.to.y, t);
+        const wobble = Math.sin((i + 1) * 1.73 + segmentIndex * 2.11);
+        const side = i % 2 === 0 ? -1 : 1;
+        const edgeOffset = width / 2 + 2 + wobble * 5;
+        const x = baseX + (horizontal ? Phaser.Math.Between(-8, 8) : side * edgeOffset);
+        const y = baseY + (horizontal ? side * edgeOffset : Phaser.Math.Between(-8, 8));
+
+        graphics.fillStyle(0x8fc468, 0.46);
+        graphics.fillEllipse(x, y, Phaser.Math.Between(18, 34), Phaser.Math.Between(7, 15));
+
+        if (i % 3 === 0) {
+          graphics.fillStyle(0x6f4b2d, 0.3);
+          graphics.fillEllipse(
+            baseX + (horizontal ? Phaser.Math.Between(-12, 12) : side * (edgeOffset - 9)),
+            baseY + (horizontal ? side * (edgeOffset - 9) : Phaser.Math.Between(-12, 12)),
+            Phaser.Math.Between(12, 24),
+            Phaser.Math.Between(5, 10),
+          );
+        }
+      }
+    });
+
+    PATH_POINTS.forEach(([x, y], index) => {
+      if (index === 0 || index === PATH_POINTS.length - 1) {
+        return;
+      }
+
+      graphics.fillStyle(0xb1824d, 0.42);
+      graphics.fillEllipse(x + Phaser.Math.Between(-12, 12), y + Phaser.Math.Between(-12, 12), 32, 18);
+      graphics.fillStyle(0x7fab5a, 0.28);
+      graphics.fillEllipse(x + Phaser.Math.Between(-20, 20), y + Phaser.Math.Between(-20, 20), 42, 14);
+    });
+  }
+
+  drawDirtRoadTexture(width) {
+    PATH_SEGMENTS.forEach((segment) => {
+      const horizontal = Math.abs(segment.to.y - segment.from.y) < 1;
+      const x = (segment.from.x + segment.to.x) / 2;
+      const y = (segment.from.y + segment.to.y) / 2;
+      const roadWidth = horizontal ? segment.length + width : width;
+      const roadHeight = horizontal ? width : segment.length + width;
+      this.add.tileSprite(x, y, roadWidth, roadHeight, "dirt-road")
+        .setDepth(1.5);
+    });
+
+    PATH_POINTS.forEach(([x, y]) => {
+      this.add.tileSprite(x, y, width, width, "dirt-road")
+        .setDepth(1.5)
+        .setMask(this.createCircleMask(x, y, width / 2));
+    });
+  }
+
+  createCircleMask(x, y, radius) {
+    const shape = this.make.graphics({ x: 0, y: 0, add: false });
+    shape.fillStyle(0xffffff, 1);
+    shape.fillCircle(x, y, radius);
+    return shape.createGeometryMask();
   }
 
   strokePath(graphics, width, color, alpha) {
@@ -236,11 +327,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   drawBaseAndEntry() {
-    this.add.circle(22, 338, 26, 0xf4c542, 1).setStrokeStyle(4, 0x7a4b25, 0.82);
-    this.add.rectangle(740, 378, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1);
-    this.add.rectangle(740, 352, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1);
-    this.add.rectangle(740, 386, 18, 50, 0x4f2f18, 1);
-    this.add.circle(736, 404, 2, 0xf6d37a, 1);
+    this.add.circle(22, 338, 28, 0xffcf45, 1)
+      .setStrokeStyle(5, 0x7a4b25, 0.9)
+      .setDepth(4);
+    this.add.circle(22, 338, 18, 0xf7d76e, 0.86)
+      .setDepth(4.1);
+    this.add.circle(626, 378, 28, 0xffcf45, 1)
+      .setStrokeStyle(5, 0x7a4b25, 0.9)
+      .setDepth(4);
+    this.add.circle(626, 378, 18, 0xf7d76e, 0.86)
+      .setDepth(4.1);
+    this.add.rectangle(740, 378, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1).setDepth(4.2);
+    this.add.rectangle(740, 352, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1).setDepth(4.3);
+    this.add.rectangle(740, 386, 18, 50, 0x4f2f18, 1).setDepth(4.4);
+    this.add.circle(736, 404, 2, 0xf6d37a, 1).setDepth(4.5);
     this.add.text(710, 326, "前哨", {
       ...TEXT_STYLE,
       fontSize: "16px",
@@ -341,26 +441,26 @@ export class GameScene extends Phaser.Scene {
 
   createHeroes() {
     this.heroes.forEach((hero) => {
-      const selectionRing = this.add.circle(0, 0, 24, 0xffe28a, 0.18)
+      const selectionRing = this.add.circle(0, 0, 19, 0xffe28a, 0.18)
         .setStrokeStyle(3, 0xffd15a, 0.95)
         .setVisible(false);
-      const shadow = this.add.ellipse(0, 16, 34, 10, 0x2f2415, 0.24);
-      const actionAura = this.add.circle(0, -10, 25, hero.accent, 0)
+      const shadow = this.add.ellipse(0, 12, 25, 8, 0x2f2415, 0.24);
+      const actionAura = this.add.circle(0, -8, 18, hero.accent, 0)
         .setStrokeStyle(2, hero.accent, 0);
-      const sprite = this.add.image(0, -10, `hero-${hero.id}`)
-        .setDisplaySize(48, 48);
-      const name = this.add.text(0, 25, hero.name, {
+      const sprite = this.add.image(0, -8, `hero-${hero.id}`)
+        .setDisplaySize(HERO_FIELD_SIZE, HERO_FIELD_SIZE);
+      const name = this.add.text(0, 18, hero.name, {
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: "12px",
         color: "#2b1c10",
         backgroundColor: "rgba(246,226,169,0.75)",
         padding: { x: 3, y: 1 },
       }).setOrigin(0.5);
-      const hpBack = this.add.rectangle(-22, -31, 44, 5, 0x3b2415, 0.9).setOrigin(0, 0.5);
-      const hpFill = this.add.rectangle(-22, -31, 44, 5, 0x4cbe58, 1).setOrigin(0, 0.5);
+      const hpBack = this.add.rectangle(-17, -24, 34, 4, 0x3b2415, 0.9).setOrigin(0, 0.5);
+      const hpFill = this.add.rectangle(-17, -24, 34, 4, 0x4cbe58, 1).setOrigin(0, 0.5);
       const group = this.add.container(hero.x, hero.y, [selectionRing, shadow, actionAura, sprite, hpBack, hpFill, name])
         .setDepth(16)
-        .setInteractive(new Phaser.Geom.Circle(0, 0, 28), Phaser.Geom.Circle.Contains);
+        .setInteractive(new Phaser.Geom.Circle(0, 0, 22), Phaser.Geom.Circle.Contains);
 
       group.on("pointerdown", (pointer, localX, localY, event) => {
         event?.stopPropagation();
@@ -369,6 +469,8 @@ export class GameScene extends Phaser.Scene {
 
       hero.group = group;
       hero.sprite = sprite;
+      hero.spriteBaseScaleX = sprite.scaleX;
+      hero.spriteBaseScaleY = sprite.scaleY;
       hero.actionAura = actionAura;
       hero.shadow = shadow;
       hero.hpFill = hpFill;
@@ -411,7 +513,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   handleHeroCommandPointer(pointer, gameObjects = []) {
-    if (!this.selectedHero || this.gameEnded || this.modalOpen) {
+    if (!this.selectedHero || this.gameEnded || this.modalOpen || this.paused) {
       return;
     }
 
@@ -522,6 +624,13 @@ export class GameScene extends Phaser.Scene {
       color: "#4a2d17",
     }).setDepth(30);
 
+    this.pauseButton = this.createButton(PANEL_X + 178, 30, 54, 26, "", () => this.togglePause(), {
+      fill: 0xe7c980,
+      stroke: 0x8a5a26,
+      color: "#3a2816",
+      hoverFill: 0xf0d894,
+    });
+
     this.startButton = this.createButton(PANEL_X + 101, 70, 154, 34, "", () => this.handleStartButton(), {
       fill: 0xc64c35,
       stroke: 0x74301f,
@@ -608,27 +717,27 @@ export class GameScene extends Phaser.Scene {
 
   createHeroPortraits() {
     this.heroPortraits = this.heroes.map((hero, index) => {
-      const x = 18 + index * 86;
+      const x = 18 + index * 106;
       const y = GAME_HEIGHT - 66;
-      const bg = this.add.rectangle(0, 0, 78, 58, 0xf6e2a9, 0.95)
+      const bg = this.add.rectangle(0, 0, 98, 58, 0xf6e2a9, 0.95)
         .setOrigin(0)
         .setStrokeStyle(3, 0x7a4b25, 0.95);
       const portraitImage = this.add.image(22, 28, `hero-${hero.id}`)
         .setDisplaySize(42, 42);
-      const name = this.add.text(42, 9, hero.name.slice(1), {
+      const name = this.add.text(48, 9, hero.name.slice(1), {
         ...TEXT_STYLE,
         fontSize: "12px",
         color: "#2b1c10",
       });
-      const hp = this.add.text(42, 29, "", {
+      const hp = this.add.text(48, 29, "", {
         ...TEXT_STYLE,
         fontSize: "12px",
         color: "#315c22",
       });
       const container = this.add.container(x, y, [bg, portraitImage, name, hp])
         .setDepth(35)
-        .setSize(78, 58)
-        .setInteractive(new Phaser.Geom.Rectangle(0, 0, 78, 58), Phaser.Geom.Rectangle.Contains);
+        .setSize(98, 58)
+        .setInteractive(new Phaser.Geom.Rectangle(0, 0, 98, 58), Phaser.Geom.Rectangle.Contains);
 
       container.on("pointerdown", (pointer, localX, localY, event) => {
         event?.stopPropagation();
@@ -697,7 +806,22 @@ export class GameScene extends Phaser.Scene {
     button.label.setText(label);
   }
 
+  togglePause(force = null) {
+    if (this.gameEnded) {
+      return;
+    }
+
+    this.paused = force ?? !this.paused;
+    this.showNotice(this.paused ? "暂停" : "继续", this.paused ? "#7a3d12" : "#315c22");
+    this.updateUi();
+  }
+
   selectBuildType(key) {
+    if (this.paused) {
+      this.showNotice("游戏已暂停", "#7a3d12");
+      return;
+    }
+
     if (!this.isTowerUnlocked(key)) {
       this.showNotice(`${TOWER_TYPES[key].name} 需要图纸`, "#9c2b24");
       return;
@@ -713,7 +837,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   handleSlotClick(slot) {
-    if (this.gameEnded || this.modalOpen) {
+    if (this.gameEnded || this.modalOpen || this.paused) {
       return;
     }
 
@@ -753,7 +877,7 @@ export class GameScene extends Phaser.Scene {
     const shadow = this.add.ellipse(slot.x, slot.y + 19, 48, 14, 0x2f2415, 0.22).setDepth(7);
     const textureKey = this.getTowerTextureKey(safeTypeKey);
     const sprite = this.add.image(slot.x, slot.y - 14, textureKey)
-      .setDisplaySize(66, 66)
+      .setDisplaySize(TOWER_DISPLAY_SIZE_BY_LEVEL[0], TOWER_DISPLAY_SIZE_BY_LEVEL[0])
       .setDepth(9)
       .setInteractive({ useHandCursor: true });
     const levelText = this.add.text(slot.x + 22, slot.y + 20, "I", {
@@ -812,20 +936,41 @@ export class GameScene extends Phaser.Scene {
   getTowerStats(typeKey, level, branch) {
     const type = TOWER_TYPES[typeKey];
 
-    if (typeKey === "arrow") {
+    if (typeKey === "altar") {
+      const stats = level >= 4 && branch
+        ? type.branches[branch]
+        : type.levels[Math.min(level, 3) - 1];
+      return {
+        range: type.range + (level - 1) * 10,
+        damage: 0,
+        rate: type.rate,
+        projectileSpeed: 0,
+        splash: 0,
+        slowFactor: 1,
+        slowMs: 0,
+        burnMs: 0,
+        burnDps: 0,
+        projectileKind: "buff",
+        damageBuff: stats.damageBuff,
+        rateBuff: stats.rateBuff,
+      };
+    }
+
+    if (type.branches) {
       if (level >= 4 && branch) {
         const branchStats = type.branches[branch];
         return {
           range: type.range + 18,
           damage: branchStats.damage,
           rate: branchStats.rate,
-          projectileSpeed: 590,
+          projectileSpeed: branchStats.projectileSpeed ?? type.projectileSpeed ?? 590,
           splash: branchStats.splash ?? 0,
-          slowFactor: 1,
-          slowMs: 0,
-          burnMs: 0,
-          burnDps: 0,
-          projectileKind: "arrow",
+          slowFactor: branchStats.slowFactor ?? type.slowFactor ?? 1,
+          slowMs: branchStats.slowMs ?? type.slowMs ?? 0,
+          burnMs: branchStats.burnMs ?? type.burnMs ?? 0,
+          burnDps: branchStats.burnDps ?? type.burnDps ?? 0,
+          shrapnelDamage: branchStats.shrapnelDamage ?? 0,
+          projectileKind: branchStats.projectile ?? type.projectile,
         };
       }
 
@@ -834,13 +979,14 @@ export class GameScene extends Phaser.Scene {
         range: type.range + (level - 1) * 10,
         damage: stats.damage,
         rate: stats.rate,
-        projectileSpeed: 560,
-        splash: 0,
-        slowFactor: 1,
-        slowMs: 0,
-        burnMs: 0,
-        burnDps: 0,
-        projectileKind: "arrow",
+        projectileSpeed: stats.projectileSpeed ?? type.projectileSpeed ?? 560,
+        splash: stats.splash ?? type.splash ?? 0,
+        slowFactor: stats.slowFactor ?? type.slowFactor ?? 1,
+        slowMs: stats.slowMs ?? type.slowMs ?? 0,
+        burnMs: stats.burnMs ?? type.burnMs ?? 0,
+        burnDps: stats.burnDps ?? type.burnDps ?? 0,
+        shrapnelDamage: stats.shrapnelDamage ?? 0,
+        projectileKind: stats.projectile ?? type.projectile,
       };
     }
 
@@ -856,7 +1002,8 @@ export class GameScene extends Phaser.Scene {
       burnMs: type.burnMs ?? 0,
       burnDps: type.burnDps ? Math.round(type.burnDps * (1 + levelBonus * 0.24)) : 0,
       projectileKind: type.projectile,
-      buffRate: type.buffRate ?? 1,
+      damageBuff: type.damageBuff ?? 0,
+      rateBuff: type.rateBuff ?? 0,
     };
   }
 
@@ -877,7 +1024,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   previewBuildRange(slot) {
-    if (slot.tower || this.gameEnded || this.modalOpen) {
+    if (slot.tower || this.gameEnded || this.modalOpen || this.paused) {
       return;
     }
 
@@ -907,7 +1054,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   endPrepPhase(early) {
-    if (!this.prepPhase) {
+    if (!this.prepPhase || this.paused) {
       return;
     }
     const bonus = early ? Math.floor(this.prepCountdown) : 0;
@@ -922,6 +1069,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   handleStartButton() {
+    if (this.paused) {
+      this.showNotice("游戏已暂停", "#7a3d12");
+      return;
+    }
+
     if (this.prepPhase) {
       this.endPrepPhase(true);
     } else {
@@ -945,7 +1097,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   startWave() {
-    if (this.prepPhase || this.waveActive || this.gameEnded || this.modalOpen || this.wave >= TOTAL_WAVES) {
+    if (this.prepPhase || this.waveActive || this.gameEnded || this.modalOpen || this.paused || this.wave >= TOTAL_WAVES) {
       return;
     }
 
@@ -1108,7 +1260,7 @@ export class GameScene extends Phaser.Scene {
 
       if (time >= tower.nextFireAt) {
         this.fireTower(tower, target, time);
-        this.pulseTower(tower);
+        this.playTowerAttackAction(tower, target);
       }
     });
   }
@@ -1117,6 +1269,20 @@ export class GameScene extends Phaser.Scene {
     if (time < tower.nextFireAt) {
       return;
     }
+
+    this.tweens.killTweensOf(tower.sprite);
+    tower.sprite.setPosition(tower.x, tower.y - 14);
+    this.tweens.add({
+      targets: tower.sprite,
+      y: tower.y - 18,
+      angle: 4,
+      yoyo: true,
+      duration: 160,
+      onComplete: () => {
+        tower.sprite.setPosition(tower.x, tower.y - 14);
+        tower.sprite.setAngle(0);
+      },
+    });
 
     const aura = this.add.circle(tower.x, tower.y, tower.range, TOWER_TYPES.altar.color, 0.08)
       .setStrokeStyle(2, TOWER_TYPES.altar.accent, 0.25)
@@ -1147,10 +1313,11 @@ export class GameScene extends Phaser.Scene {
 
     target.slowUntil = Math.max(target.slowUntil, time + tower.slowMs);
     target.slowFactor = Math.min(target.slowFactor, tower.slowFactor);
-    this.damageEnemy(target, tower.damage * tower.guards.length, {
+    this.damageEnemy(target, Math.round(tower.damage * this.getTowerDamageMultiplier(tower)), {
       slowMs: tower.slowMs,
       slowFactor: tower.slowFactor,
     });
+    this.playBarracksAttackAction(tower, target);
     tower.nextFireAt = time + tower.rate * this.getTowerRateMultiplier(tower);
   }
 
@@ -1161,16 +1328,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   getTowerRateMultiplier(tower) {
-    const altar = this.towers.find((item) => item.typeKey === "altar" && item !== tower
-      && Phaser.Math.Distance.Between(item.x, item.y, tower.x, tower.y) <= item.range);
-    return altar ? altar.buffRate : 1;
+    return 1 / (1 + this.getTowerAltarBuff(tower).rateBuff);
+  }
+
+  getTowerDamageMultiplier(tower) {
+    return 1 + this.getTowerAltarBuff(tower).damageBuff;
+  }
+
+  getTowerAltarBuff(tower) {
+    const altar = this.towers
+      .filter((item) => item.typeKey === "altar" && item !== tower
+        && Phaser.Math.Distance.Between(item.x, item.y, tower.x, tower.y) <= item.range)
+      .sort((a, b) => (b.damageBuff + b.rateBuff) - (a.damageBuff + a.rateBuff))[0];
+    return altar ? { damageBuff: altar.damageBuff ?? 0, rateBuff: altar.rateBuff ?? 0 } : { damageBuff: 0, rateBuff: 0 };
   }
 
   fireTower(tower, target, time) {
     const type = TOWER_TYPES[tower.typeKey];
     const projectileKind = tower.projectileKind ?? type.projectile;
 
-    if (projectileKind === "arrow") {
+    if (projectileKind === "meteor") {
+      const meteor = this.add.circle(target.sprite.x - 72, target.sprite.y - 130, 14, 0xff6a2b, 1)
+        .setStrokeStyle(3, 0xffd18a, 0.9)
+        .setDepth(24);
+      this.projectiles.push(this.createProjectileData(meteor, tower, target, {
+        speed: tower.projectileSpeed || 760,
+        targetX: target.sprite.x,
+        targetY: target.sprite.y,
+      }));
+    } else if (projectileKind === "arrow") {
       const arrow = this.add.image(tower.x, tower.y - 16, "arrow-shot")
         .setDepth(22);
       this.projectiles.push(this.createProjectileData(arrow, tower, target));
@@ -1184,28 +1370,111 @@ export class GameScene extends Phaser.Scene {
     tower.nextFireAt = time + tower.rate * this.getTowerRateMultiplier(tower);
   }
 
-  createProjectileData(sprite, tower, target) {
+  createProjectileData(sprite, tower, target, overrides = {}) {
     return {
       sprite,
       target,
-      damage: tower.damage,
-      speed: tower.projectileSpeed,
+      damage: Math.round(tower.damage * this.getTowerDamageMultiplier(tower)),
+      speed: overrides.speed ?? tower.projectileSpeed,
       splash: tower.splash,
       slowFactor: tower.slowFactor,
       slowMs: tower.slowMs,
       burnMs: tower.burnMs,
       burnDps: tower.burnDps,
+      shrapnelDamage: tower.shrapnelDamage ?? 0,
       typeKey: tower.typeKey,
+      projectileKind: tower.projectileKind,
+      targetX: overrides.targetX,
+      targetY: overrides.targetY,
     };
   }
 
-  pulseTower(tower) {
+  playTowerAttackAction(tower, target) {
+    const type = TOWER_TYPES[tower.typeKey];
+    const angle = Phaser.Math.Angle.Between(tower.x, tower.y, target.sprite.x, target.sprite.y);
+    const recoil = tower.typeKey === "artillery" ? 8 : 4;
+    const flashX = tower.x + Math.cos(angle) * 18;
+    const flashY = tower.y - 16 + Math.sin(angle) * 18;
+
+    this.tweens.killTweensOf(tower.sprite);
+    tower.sprite.setPosition(tower.x, tower.y - 14);
+    tower.sprite.setAngle(0);
     this.tweens.add({
       targets: tower.sprite,
-      scaleX: 1.08,
-      scaleY: 1.08,
+      x: tower.x - Math.cos(angle) * recoil,
+      y: tower.y - 14 - Math.sin(angle) * recoil,
+      angle: tower.typeKey === "arrow" ? Phaser.Math.RadToDeg(angle) * 0.03 : 0,
       yoyo: true,
-      duration: 80,
+      duration: tower.typeKey === "artillery" ? 95 : 70,
+      onComplete: () => {
+        tower.sprite.setPosition(tower.x, tower.y - 14);
+        tower.sprite.setAngle(0);
+      },
+    });
+
+    if (tower.typeKey === "arrow") {
+      this.addTowerFlash(flashX, flashY, 0xfff0a8, 12, 110);
+    } else if (tower.typeKey === "mage") {
+      this.addTowerRing(tower.x, tower.y - 14, type.color, type.accent, 20, 160);
+    } else if (tower.typeKey === "artillery") {
+      this.addTowerFlash(flashX, flashY, 0xffb74d, 20, 140);
+      this.cameras.main.shake(55, 0.0015);
+    } else if (tower.typeKey === "frost") {
+      this.addTowerRing(tower.x, tower.y - 14, 0x9bdcff, 0xdbf7ff, 24, 190);
+    } else if (tower.typeKey === "flame") {
+      this.addTowerFlash(flashX, flashY, 0xff7a35, 18, 130);
+    }
+  }
+
+  playBarracksAttackAction(tower, target) {
+    tower.guards.forEach((guard, index) => {
+      const direction = guard.sprite.x > target.sprite.x ? -1 : 1;
+      this.tweens.killTweensOf(guard.sprite);
+      this.tweens.add({
+        targets: guard.sprite,
+        x: guard.sprite.x + direction * 8,
+        angle: direction * (index === 0 ? -10 : 10),
+        yoyo: true,
+        duration: 80,
+        onComplete: () => guard.sprite.setAngle(0),
+      });
+    });
+
+    const slash = this.add.arc(target.sprite.x, target.sprite.y - 8, 18, 210, 330, false, 0xffdf82, 0)
+      .setStrokeStyle(4, 0xffdf82, 0.82)
+      .setDepth(23);
+    this.tweens.add({
+      targets: slash,
+      alpha: 0,
+      scale: 1.25,
+      duration: 130,
+      onComplete: () => slash.destroy(),
+    });
+  }
+
+  addTowerFlash(x, y, color, radius, duration) {
+    const flash = this.add.star(x, y, 6, radius * 0.28, radius, color, 0.85)
+      .setDepth(23);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 1.35,
+      angle: 35,
+      duration,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
+  addTowerRing(x, y, color, stroke, radius, duration) {
+    const ring = this.add.circle(x, y, radius, color, 0.12)
+      .setStrokeStyle(3, stroke, 0.72)
+      .setDepth(23);
+    this.tweens.add({
+      targets: ring,
+      alpha: 0,
+      scale: 1.45,
+      duration,
+      onComplete: () => ring.destroy(),
     });
   }
 
@@ -1218,8 +1487,8 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      const targetX = projectile.target.sprite.x;
-      const targetY = projectile.target.sprite.y;
+      const targetX = projectile.targetX ?? projectile.target.sprite.x;
+      const targetY = projectile.targetY ?? projectile.target.sprite.y;
       const distance = Phaser.Math.Distance.Between(projectile.sprite.x, projectile.sprite.y, targetX, targetY);
       const travel = projectile.speed * dt;
 
@@ -1257,6 +1526,9 @@ export class GameScene extends Phaser.Scene {
         if (enemy.alive && distance <= projectile.splash) {
           const falloff = Phaser.Math.Clamp(1 - distance / (projectile.splash * 1.6), 0.42, 1);
           this.damageEnemy(enemy, Math.round(projectile.damage * falloff), projectile);
+          if (projectile.shrapnelDamage > 0) {
+            this.damageEnemy(enemy, projectile.shrapnelDamage, {});
+          }
         }
       });
       return;
@@ -1378,7 +1650,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.showNotice(`守住第 ${this.wave} 波  +${bonus}`, "#315c22");
+    this.showNotice(`守住第 ${this.wave} 波 +${bonus}`, "#315c22");
     this.startPrepPhase(30);
   }
 
@@ -1389,8 +1661,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (tower.typeKey === "arrow" && tower.level === 3 && !tower.branch) {
-      this.openArrowBranchModal(tower);
+    if (this.canChooseTowerBranch(tower)) {
+      this.openTowerBranchModal(tower);
       return;
     }
 
@@ -1416,21 +1688,19 @@ export class GameScene extends Phaser.Scene {
     this.updateUi();
   }
 
-  openArrowBranchModal(tower) {
-    this.createModalBase("弓箭塔四级分支", "选择一条路线。爆裂清小怪，鹰眼打精英和 Boss。");
-    const branches = [
-      ["burst", TOWER_TYPES.arrow.branches.burst],
-      ["hawk", TOWER_TYPES.arrow.branches.hawk],
-    ];
+  openTowerBranchModal(tower) {
+    const type = TOWER_TYPES[tower.typeKey];
+    this.createModalBase(`${type.name}四级分支`, "选择一条升级路线。");
+    const branches = Object.entries(type.branches ?? {});
 
     branches.forEach(([key, branch], index) => {
       const x = 310 + index * 300;
       this.addModalText(x - 105, 190, `${branch.name}\n${branch.description}\n升级费用 ${this.getUpgradeCost(tower)}`, 15, "#3a2816", 220);
-      const button = this.createButton(x, 292, 180, 38, `选择${branch.name}`, () => this.applyArrowBranch(tower, key), {
-        fill: key === "burst" ? 0xd95f32 : 0x6f8dbd,
+      const button = this.createButton(x, 292, 180, 38, `选择${branch.name}`, () => this.applyTowerBranch(tower, key), {
+        fill: index === 0 ? 0xd95f32 : 0x6f8dbd,
         stroke: 0x70451f,
         color: "#fff6d8",
-        hoverFill: key === "burst" ? 0xec7448 : 0x84a7dc,
+        hoverFill: index === 0 ? 0xec7448 : 0x84a7dc,
       }).setDepth(93);
       this.modalObjects.push(button);
       this.setButtonEnabled(button, this.gold >= this.getUpgradeCost(tower));
@@ -1443,7 +1713,7 @@ export class GameScene extends Phaser.Scene {
     this.modalObjects.push(close);
   }
 
-  applyArrowBranch(tower, branchKey) {
+  applyTowerBranch(tower, branchKey) {
     const cost = this.getUpgradeCost(tower);
 
     if (this.gold < cost) {
@@ -1455,17 +1725,17 @@ export class GameScene extends Phaser.Scene {
     tower.level = 4;
     tower.branch = branchKey;
     tower.totalCost += cost;
-    Object.assign(tower, this.getTowerStats("arrow", 4, branchKey));
+    Object.assign(tower, this.getTowerStats(tower.typeKey, 4, branchKey));
     this.applyTowerVisual(tower);
     this.closeModal();
     this.selectTower(tower);
-    this.showNotice(`升级为${this.getTowerDisplayName(tower)}`, "#7a3d12");
+    this.showNotice(`升级为 ${this.getTowerDisplayName(tower)}`, "#7a3d12");
     this.updateUi();
   }
-
   applyTowerVisual(tower) {
     tower.levelText.setText(["I", "II", "III", "IV"][tower.level - 1]);
-    tower.sprite.setScale(1 + (tower.level - 1) * 0.08);
+    const displaySize = TOWER_DISPLAY_SIZE_BY_LEVEL[tower.level - 1] ?? TOWER_DISPLAY_SIZE_BY_LEVEL.at(-1);
+    tower.sprite.setDisplaySize(displaySize, displaySize);
     tower.sprite.clearTint();
     if (tower.branch === "burst") {
       tower.sprite.setTint(0xffb071);
@@ -1499,11 +1769,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   getTowerMaxLevel(tower) {
-    return tower.typeKey === "arrow" ? 4 : 3;
+    return TOWER_TYPES[tower.typeKey].branches ? 4 : 3;
   }
 
   getUpgradeCost(tower) {
-    if (tower.typeKey === "arrow" && tower.level === 3 && !tower.branch) {
+    if (this.canChooseTowerBranch(tower)) {
       return 120;
     }
 
@@ -1511,11 +1781,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   getTowerDisplayName(tower) {
-    if (tower.typeKey === "arrow" && tower.branch) {
-      return TOWER_TYPES.arrow.branches[tower.branch].name;
+    if (tower.branch) {
+      return TOWER_TYPES[tower.typeKey].branches?.[tower.branch]?.name ?? TOWER_TYPES[tower.typeKey].name;
     }
 
     return TOWER_TYPES[tower.typeKey].name;
+  }
+
+  canChooseTowerBranch(tower) {
+    return Boolean(TOWER_TYPES[tower.typeKey].branches) && tower.level === 3 && !tower.branch;
   }
 
   isTowerUnlocked(key) {
@@ -1887,7 +2161,7 @@ export class GameScene extends Phaser.Scene {
     hero.group.setPosition(hero.x, hero.y);
     hero.sprite?.setTint(hero.dead ? 0x777777 : 0xffffff);
     this.updateHeroActionPose(hero, time, moving);
-    hero.hpFill.setDisplaySize(44 * Phaser.Math.Clamp(hero.hp / hero.stats.maxHp, 0, 1), 5);
+    hero.hpFill.setDisplaySize(34 * Phaser.Math.Clamp(hero.hp / hero.stats.maxHp, 0, 1), 4);
     hero.nameLabel.setText(`${hero.name}`);
   }
 
@@ -1910,8 +2184,8 @@ export class GameScene extends Phaser.Scene {
 
     if (state === "move") {
       hero.sprite.setAngle(Math.sin(phase) * 5);
-      hero.sprite.setY(-10 + Math.abs(Math.sin(phase)) * -4);
-      hero.sprite.setScale(1 + Math.sin(phase) * 0.025, 1 - Math.sin(phase) * 0.02);
+      hero.sprite.setY(-8 + Math.abs(Math.sin(phase)) * -3);
+      this.setHeroSpritePoseScale(hero, 1 + Math.sin(phase) * 0.025, 1 - Math.sin(phase) * 0.02);
       hero.shadow?.setScale(1.05 - Math.abs(Math.sin(phase)) * 0.12, 1);
       return;
     }
@@ -1920,17 +2194,17 @@ export class GameScene extends Phaser.Scene {
       const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 220, 0, 1);
       const lunge = Math.sin(progress * Math.PI) * 9;
       hero.sprite.setAngle(hero.id === "ergou" ? -14 : 10);
-      hero.sprite.setY(-10 - lunge * 0.35);
+      hero.sprite.setY(-8 - lunge * 0.3);
       hero.sprite.setX((hero.sprite.flipX ? -1 : 1) * lunge);
-      hero.sprite.setScale(1.08, 0.94);
+      this.setHeroSpritePoseScale(hero, 1.08, 0.94);
       return;
     }
 
     if (state === "block") {
       const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 300, 0, 1);
       hero.sprite.setAngle(Math.sin(progress * Math.PI) * -8);
-      hero.sprite.setY(-7);
-      hero.sprite.setScale(1.12, 0.86);
+      hero.sprite.setY(-6);
+      this.setHeroSpritePoseScale(hero, 1.12, 0.86);
       hero.actionAura?.setAlpha(0.5 * (1 - progress));
       hero.actionAura?.setScale(1.2 + progress * 0.65);
       hero.actionAura?.setStrokeStyle(4, hero.accent, 0.72 * (1 - progress));
@@ -1940,17 +2214,24 @@ export class GameScene extends Phaser.Scene {
     if (state === "ultimate") {
       const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 680, 0, 1);
       hero.sprite.setAngle(Math.sin(progress * Math.PI * 3) * 8);
-      hero.sprite.setY(-14 + Math.sin(progress * Math.PI) * -8);
-      hero.sprite.setScale(1.2, 1.2);
+      hero.sprite.setY(-11 + Math.sin(progress * Math.PI) * -6);
+      this.setHeroSpritePoseScale(hero, 1.2, 1.2);
       hero.actionAura?.setAlpha(0.62 * (1 - progress));
       hero.actionAura?.setScale(1.35 + progress * 1.1);
       hero.actionAura?.setStrokeStyle(5, hero.accent, 0.82 * (1 - progress));
       return;
     }
 
-    hero.sprite.setY(-10 + Math.sin(phase * 0.45) * 1.2);
+    hero.sprite.setY(-8 + Math.sin(phase * 0.45) * 1);
     hero.sprite.setAngle(0);
-    hero.sprite.setScale(1);
+    this.setHeroSpritePoseScale(hero, 1, 1);
+  }
+
+  setHeroSpritePoseScale(hero, scaleX, scaleY = scaleX) {
+    hero.sprite?.setScale(
+      (hero.spriteBaseScaleX ?? 1) * scaleX,
+      (hero.spriteBaseScaleY ?? 1) * scaleY,
+    );
   }
 
   setHeroAction(hero, state, duration) {
@@ -2244,7 +2525,7 @@ export class GameScene extends Phaser.Scene {
     const blueprint = this.chooseLockedBlueprint();
 
     if (blueprint) {
-      goods.push({ kind: "blueprint", towerKey: blueprint, name: `${TOWER_TYPES[blueprint].name}图纸`, price: 70, desc: "章节末必出特殊塔图纸" });
+      goods.push({ kind: "blueprint", towerKey: blueprint, name: `${TOWER_TYPES[blueprint].name}图纸`, price: 70, desc: "章末必出特殊塔图纸" });
     } else {
       goods.push({ kind: "fragment", name: "图纸大师补偿", price: 0, desc: "所有特殊塔已解锁，获得 80 金币" });
     }
@@ -2481,7 +2762,9 @@ export class GameScene extends Phaser.Scene {
       this.setButtonLabel(this.startButton, this.waveActive ? `第 ${this.wave}/${TOTAL_WAVES} 波中` : `开始第 ${this.wave + 1}/${TOTAL_WAVES} 波`);
     }
 
-    this.setButtonEnabled(this.startButton, (this.prepPhase || (!this.waveActive && this.wave < TOTAL_WAVES)) && !this.gameEnded && !this.modalOpen);
+    this.setButtonLabel(this.pauseButton, this.paused ? "继续" : "暂停");
+    this.setButtonEnabled(this.pauseButton, !this.gameEnded && !this.modalOpen);
+    this.setButtonEnabled(this.startButton, (this.prepPhase || (!this.waveActive && this.wave < TOTAL_WAVES)) && !this.gameEnded && !this.modalOpen && !this.paused);
     this.setButtonLabel(this.inventoryButton, `背包 ${this.inventory.length}`);
     this.updateHeroPortraits();
     this.updateTowerButtons();
@@ -2505,7 +2788,7 @@ export class GameScene extends Phaser.Scene {
       button.bg.setStrokeStyle(3, selected ? 0xc64c35 : 0x8a5a26, 1);
       button.bg.setFillStyle(selected ? 0xf5b83c : button.defaultFill, 1);
       this.setButtonLabel(button, unlocked ? `${tower.name} ${tower.price}` : `${tower.name} 图纸`);
-      this.setButtonEnabled(button, unlocked && !this.gameEnded);
+      this.setButtonEnabled(button, unlocked && !this.gameEnded && !this.paused);
       icon.setAlpha(unlocked ? 1 : 0.38);
     });
   }
@@ -2516,8 +2799,11 @@ export class GameScene extends Phaser.Scene {
       const type = TOWER_TYPES[typeKey];
       const unlocked = this.isTowerUnlocked(typeKey);
       const previewStats = this.getTowerStats(typeKey, 1, null);
+      const statLine = typeKey === "altar"
+        ? `伤害加成 +${Math.round(previewStats.damageBuff * 100)}%\n攻速加成 +${Math.round(previewStats.rateBuff * 100)}%`
+        : `伤害 ${previewStats.damage}\n射程 ${previewStats.range}\n攻速 ${(1000 / previewStats.rate).toFixed(1)}/秒`;
       this.selectionText.setText(
-        `${type.name}\n${unlocked ? type.description : "需要特殊塔图纸"}\n花费 ${type.price}\n伤害 ${previewStats.damage}\n射程 ${previewStats.range}\n攻速 ${(1000 / previewStats.rate).toFixed(1)}/秒`,
+        `${type.name}\n${unlocked ? type.description : "需要特殊塔图纸"}\n花费 ${type.price}\n${statLine}`,
       );
       this.upgradeButton.setVisible(false);
       this.sellButton.setVisible(false);
@@ -2527,10 +2813,15 @@ export class GameScene extends Phaser.Scene {
     const tower = this.selectedTower;
     const upgradeCost = this.getUpgradeCost(tower);
     const atMax = tower.level >= this.getTowerMaxLevel(tower);
-    const branchReady = tower.typeKey === "arrow" && tower.level === 3 && !tower.branch;
+    const branchReady = this.canChooseTowerBranch(tower);
 
+    const towerType = TOWER_TYPES[tower.typeKey];
+    const towerDescription = tower.branch ? towerType.branches?.[tower.branch]?.description : towerType.description;
+    const towerStatLine = tower.typeKey === "altar"
+      ? `伤害加成 +${Math.round((tower.damageBuff ?? 0) * 100)}%\n攻速加成 +${Math.round((tower.rateBuff ?? 0) * 100)}%`
+      : `伤害 ${tower.damage}\n射程 ${tower.range}\n攻速 ${(1000 / tower.rate).toFixed(1)}/秒`;
     this.selectionText.setText(
-      `${this.getTowerDisplayName(tower)} Lv.${tower.level}\n${tower.branch ? TOWER_TYPES.arrow.branches[tower.branch].description : TOWER_TYPES[tower.typeKey].description}\n伤害 ${tower.damage}\n射程 ${tower.range}\n攻速 ${(1000 / tower.rate).toFixed(1)}/秒`,
+      `${this.getTowerDisplayName(tower)} Lv.${tower.level}\n${towerDescription}\n${towerStatLine}`,
     );
     this.upgradeButton.setVisible(true);
     this.sellButton.setVisible(true);
