@@ -59,6 +59,9 @@ export class GameScene extends Phaser.Scene {
     this.heroMoveMarker = null;
     this.selectedShopHeroId = "tiezhu";
     this.waveActive = false;
+    this.prepPhase = false;
+    this.prepCountdown = 0;
+    this.prepInitialDuration = 0;
     this.gameEnded = false;
     this.modalOpen = false;
     this.modalObjects = [];
@@ -85,11 +88,21 @@ export class GameScene extends Phaser.Scene {
     this.createUi();
     this.createHeroCommandInput();
     this.updateUi();
+    this.startPrepPhase(60);
   }
 
   update(time, delta) {
     if (this.gameEnded || this.modalOpen) {
       return;
+    }
+
+    if (this.prepPhase) {
+      this.prepCountdown -= delta / 1000;
+      this.updatePrepDisplay();
+      if (this.prepCountdown <= 0) {
+        this.endPrepPhase(false);
+        return;
+      }
     }
 
     this.updateSpawning(time);
@@ -471,6 +484,17 @@ export class GameScene extends Phaser.Scene {
       align: "center",
     }).setOrigin(0.5).setDepth(30).setAlpha(0);
 
+    this.prepBox = this.add.rectangle(PANEL_X / 2, 76, 360, 40, 0xf6e2a9, 0.94)
+      .setStrokeStyle(2, 0x7a4b25, 0.92)
+      .setDepth(30)
+      .setVisible(false);
+    this.prepText = this.add.text(PANEL_X / 2, 76, "", {
+      ...TEXT_STYLE,
+      fontSize: "14px",
+      color: "#4a2d17",
+      align: "center",
+    }).setOrigin(0.5).setDepth(31).setVisible(false);
+
     this.createHeroPortraits();
 
     this.add.text(PANEL_X + 24, 24, "王冠前哨", {
@@ -479,7 +503,7 @@ export class GameScene extends Phaser.Scene {
       color: "#4a2d17",
     }).setDepth(30);
 
-    this.startButton = this.createButton(PANEL_X + 101, 70, 154, 34, "", () => this.startWave(), {
+    this.startButton = this.createButton(PANEL_X + 101, 70, 154, 34, "", () => this.handleStartButton(), {
       fill: 0xc64c35,
       stroke: 0x74301f,
       color: "#fff6d8",
@@ -855,8 +879,54 @@ export class GameScene extends Phaser.Scene {
     this.hoverRange = null;
   }
 
+  startPrepPhase(duration) {
+    this.prepPhase = true;
+    this.prepCountdown = duration;
+    this.prepInitialDuration = duration;
+    this.updateUi();
+    this.updatePrepDisplay();
+  }
+
+  endPrepPhase(early) {
+    if (!this.prepPhase) {
+      return;
+    }
+    const bonus = early ? Math.floor(this.prepCountdown) : 0;
+    this.prepPhase = false;
+    this.prepCountdown = 0;
+    this.updatePrepDisplay();
+    if (bonus > 0) {
+      this.gold += bonus;
+      this.showNotice(`提前开始奖励 +${bonus} 金币`, "#315c22");
+    }
+    this.startWave();
+  }
+
+  handleStartButton() {
+    if (this.prepPhase) {
+      this.endPrepPhase(true);
+    } else {
+      this.startWave();
+    }
+  }
+
+  updatePrepDisplay() {
+    if (!this.prepBox) {
+      return;
+    }
+    const visible = this.prepPhase;
+    this.prepBox.setVisible(visible);
+    this.prepText.setVisible(visible);
+    if (visible) {
+      const secs = Math.ceil(this.prepCountdown);
+      const label = this.prepInitialDuration === 60 ? "游戏准备" : "下波准备";
+      const bonus = Math.floor(this.prepCountdown);
+      this.prepText.setText(`${label}  ${secs} 秒  提前开始可奖励 ${bonus} 金币`);
+    }
+  }
+
   startWave() {
-    if (this.waveActive || this.gameEnded || this.modalOpen || this.wave >= TOTAL_WAVES) {
+    if (this.prepPhase || this.waveActive || this.gameEnded || this.modalOpen || this.wave >= TOTAL_WAVES) {
       return;
     }
 
@@ -1290,7 +1360,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.showNotice(`守住第 ${this.wave} 波  +${bonus}`, "#315c22");
-    this.updateUi();
+    this.startPrepPhase(30);
   }
 
   upgradeSelectedTower() {
@@ -2011,6 +2081,8 @@ export class GameScene extends Phaser.Scene {
       this.closeModal();
       if (final) {
         this.finishVictory();
+      } else {
+        this.startPrepPhase(30);
       }
     });
   }
@@ -2198,11 +2270,13 @@ export class GameScene extends Phaser.Scene {
 
     if (this.wave >= TOTAL_WAVES && !this.waveActive) {
       this.setButtonLabel(this.startButton, "波次已完成");
+    } else if (this.prepPhase) {
+      this.setButtonLabel(this.startButton, `立即开始 +${Math.floor(this.prepCountdown)}`);
     } else {
       this.setButtonLabel(this.startButton, this.waveActive ? `第 ${this.wave}/${TOTAL_WAVES} 波中` : `开始第 ${this.wave + 1}/${TOTAL_WAVES} 波`);
     }
 
-    this.setButtonEnabled(this.startButton, !this.waveActive && !this.gameEnded && !this.modalOpen && this.wave < TOTAL_WAVES);
+    this.setButtonEnabled(this.startButton, (this.prepPhase || (!this.waveActive && this.wave < TOTAL_WAVES)) && !this.gameEnded && !this.modalOpen);
     this.setButtonLabel(this.inventoryButton, `背包 ${this.inventory.length}`);
     this.updateHeroPortraits();
     this.updateTowerButtons();
