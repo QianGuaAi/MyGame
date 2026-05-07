@@ -22,8 +22,9 @@ import { cloneStats, pickRandom } from "../utils/random.js";
 const HERO_OUTPOST_OFFSET = 24;
 const HERO_OUTPOST_SPACING = 34;
 const HERO_MOVE_SPEED = 150;
-const HERO_ROAD_CLICK_RADIUS = 40;
 const HERO_RESPAWN_MS = 8000;
+const HERO_ULTIMATE_ATTACKS = 5;
+const HERO_COLLISION_RADIUS = 18;
 const TOWER_TEXTURE_KEYS = {
   arrow: "tower-arrow",
   mage: "tower-mage",
@@ -126,10 +127,15 @@ export class GameScene extends Phaser.Scene {
         y: start.y,
         pathProgress,
         targetProgress: pathProgress,
+        targetX: start.x,
+        targetY: start.y,
         hp: def.maxHp,
         equipment: { weapon: null, armor: null, offhand: null },
         nextAttackAt: 0,
         nextHealAt: 0,
+        actionState: "idle",
+        actionUntil: 0,
+        attackCount: 0,
         dead: false,
         respawnAt: 0,
       };
@@ -243,8 +249,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   placeDecorations() {
-    DECORATIONS.forEach(([texture, x, y, scale]) => {
+    this.mapObstacles = [];
+    DECORATIONS.forEach(([texture, x, y, scale, options = {}]) => {
       this.add.image(x, y, texture).setScale(scale).setDepth(y < 150 ? 1 : 2).setAlpha(0.96);
+      if (options.obstacleRadius) {
+        this.mapObstacles.push({
+          x,
+          y,
+          radius: options.obstacleRadius * scale,
+        });
+      }
     });
   }
 
@@ -331,6 +345,8 @@ export class GameScene extends Phaser.Scene {
         .setStrokeStyle(3, 0xffd15a, 0.95)
         .setVisible(false);
       const shadow = this.add.ellipse(0, 16, 34, 10, 0x2f2415, 0.24);
+      const actionAura = this.add.circle(0, -10, 25, hero.accent, 0)
+        .setStrokeStyle(2, hero.accent, 0);
       const sprite = this.add.image(0, -10, `hero-${hero.id}`)
         .setDisplaySize(48, 48);
       const name = this.add.text(0, 25, hero.name, {
@@ -342,7 +358,7 @@ export class GameScene extends Phaser.Scene {
       }).setOrigin(0.5);
       const hpBack = this.add.rectangle(-22, -31, 44, 5, 0x3b2415, 0.9).setOrigin(0, 0.5);
       const hpFill = this.add.rectangle(-22, -31, 44, 5, 0x4cbe58, 1).setOrigin(0, 0.5);
-      const group = this.add.container(hero.x, hero.y, [selectionRing, shadow, sprite, hpBack, hpFill, name])
+      const group = this.add.container(hero.x, hero.y, [selectionRing, shadow, actionAura, sprite, hpBack, hpFill, name])
         .setDepth(16)
         .setInteractive(new Phaser.Geom.Circle(0, 0, 28), Phaser.Geom.Circle.Contains);
 
@@ -353,6 +369,8 @@ export class GameScene extends Phaser.Scene {
 
       hero.group = group;
       hero.sprite = sprite;
+      hero.actionAura = actionAura;
+      hero.shadow = shadow;
       hero.hpFill = hpFill;
       hero.nameLabel = name;
       hero.selectionRing = selectionRing;
@@ -382,7 +400,7 @@ export class GameScene extends Phaser.Scene {
     this.selectedTower = null;
     this.clearSelectedRange();
     this.updateHeroSelectionVisuals();
-    this.showNotice(`${hero.name}：点道路移动`, "#2f4972");
+    this.showNotice(`${hero.name}：点击地图移动`, "#2f4972");
     this.updateUi();
   }
 
@@ -401,10 +419,10 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const point = this.getClosestPointOnPath(pointer.worldX, pointer.worldY);
+    const point = { x: pointer.worldX, y: pointer.worldY };
 
-    if (!point || point.distance > HERO_ROAD_CLICK_RADIUS) {
-      this.showNotice("英雄只能走在路上", "#9c2b24");
+    if (!this.isHeroPointWalkable(point.x, point.y)) {
+      this.showNotice("英雄无法穿过阻碍", "#9c2b24");
       return;
     }
 
@@ -418,7 +436,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    hero.targetProgress = point.progress;
+    hero.targetX = point.x;
+    hero.targetY = point.y;
     this.showHeroMoveMarker(point.x, point.y, hero.accent);
     this.showNotice(`${hero.name} 移动`, "#315c22");
   }
@@ -1638,7 +1657,7 @@ export class GameScene extends Phaser.Scene {
         hero.hp = Math.min(hero.stats.maxHp, hero.hp + hero.stats.regen * dt);
       }
 
-      this.updateHeroMovement(hero, dt);
+      const moving = this.updateHeroMovement(hero, dt);
       this.updateHeroSupport(hero, time);
       const target = this.findHeroTarget(hero);
 
@@ -1646,7 +1665,7 @@ export class GameScene extends Phaser.Scene {
         this.heroAttack(hero, target, time);
       }
 
-      this.updateHeroSprite(hero);
+      this.updateHeroSprite(hero, time, moving);
     });
 
     this.updateHeroPortraits(time);
@@ -1669,24 +1688,60 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateHeroMovement(hero, dt) {
-    if (typeof hero.pathProgress !== "number") {
-      const point = this.getClosestPointOnPath(hero.x, hero.y);
-      hero.pathProgress = point.progress;
-      hero.targetProgress = point.progress;
+    if (typeof hero.targetX !== "number" || typeof hero.targetY !== "number") {
+      hero.targetX = hero.x;
+      hero.targetY = hero.y;
     }
 
-    const remaining = hero.targetProgress - hero.pathProgress;
+    const dx = hero.targetX - hero.x;
+    const dy = hero.targetY - hero.y;
+    const distance = Math.hypot(dx, dy);
+    let moving = false;
 
-    if (Math.abs(remaining) <= 0.5) {
-      hero.pathProgress = hero.targetProgress;
+    if (distance <= 1) {
+      hero.x = hero.targetX;
+      hero.y = hero.targetY;
     } else {
-      const step = Math.min(Math.abs(remaining), HERO_MOVE_SPEED * dt) * Math.sign(remaining);
-      hero.pathProgress += step;
+      const step = Math.min(distance, HERO_MOVE_SPEED * dt);
+      const nextX = hero.x + (dx / distance) * step;
+      const nextY = hero.y + (dy / distance) * step;
+
+      if (this.isHeroPointWalkable(nextX, nextY)) {
+        hero.x = nextX;
+        hero.y = nextY;
+        moving = true;
+      } else {
+        hero.targetX = hero.x;
+        hero.targetY = hero.y;
+        this.addFloatingText(hero.x, hero.y - 34, "受阻", "#9c2b24");
+      }
     }
 
-    const point = pointOnPath(hero.pathProgress);
-    hero.x = point.x;
-    hero.y = point.y;
+    if (moving) {
+      hero.moveDirection = dx >= 0 ? 1 : -1;
+    }
+
+    const closest = this.getClosestPointOnPath(hero.x, hero.y);
+    if (closest) {
+      hero.pathProgress = closest.progress;
+      hero.targetProgress = closest.progress;
+    }
+
+    return moving;
+  }
+
+  isHeroPointWalkable(x, y) {
+    if (x < HERO_COLLISION_RADIUS || x > PANEL_X - HERO_COLLISION_RADIUS) {
+      return false;
+    }
+
+    if (y < HERO_COLLISION_RADIUS || y > GAME_HEIGHT - HERO_COLLISION_RADIUS) {
+      return false;
+    }
+
+    return !(this.mapObstacles ?? []).some((obstacle) => (
+      Phaser.Math.Distance.Between(x, y, obstacle.x, obstacle.y) < obstacle.radius + HERO_COLLISION_RADIUS
+    ));
   }
 
   updateHeroSupport(hero, time) {
@@ -1744,7 +1799,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.damageEnemy(target, damage, source);
+    this.playHeroAttackAction(hero, target);
     this.addHeroStrike(hero, target, critical);
+    hero.attackCount = (hero.attackCount ?? 0) + 1;
+    if (hero.attackCount >= HERO_ULTIMATE_ATTACKS) {
+      hero.attackCount = 0;
+      this.playHeroUltimateAction(hero, target);
+    }
     hero.nextAttackAt = time + hero.stats.rate;
   }
 
@@ -1785,6 +1846,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     hero.hp -= damage;
+    if (blocked) {
+      this.playHeroBlockAction(hero);
+    }
     this.addFloatingText(hero.x, hero.y - 38, blocked ? `格挡 -${damage}` : `-${damage}`, blocked ? "#2f4972" : "#9c2b24");
 
     if (hero.hp <= 0) {
@@ -1815,15 +1879,156 @@ export class GameScene extends Phaser.Scene {
     this.updateHeroPortraits();
   }
 
-  updateHeroSprite(hero) {
+  updateHeroSprite(hero, time = this.time?.now ?? 0, moving = false) {
     if (!hero.group) {
       return;
     }
 
     hero.group.setPosition(hero.x, hero.y);
     hero.sprite?.setTint(hero.dead ? 0x777777 : 0xffffff);
+    this.updateHeroActionPose(hero, time, moving);
     hero.hpFill.setDisplaySize(44 * Phaser.Math.Clamp(hero.hp / hero.stats.maxHp, 0, 1), 5);
     hero.nameLabel.setText(`${hero.name}`);
+  }
+
+  updateHeroActionPose(hero, time, moving) {
+    if (!hero.sprite || hero.dead) {
+      return;
+    }
+
+    const actionActive = (hero.actionUntil ?? 0) > time;
+    const state = actionActive ? hero.actionState : moving ? "move" : "idle";
+    const phase = time * 0.012 + (hero.id === "ergou" ? 1.2 : hero.id === "yueguang" ? 2.4 : 0);
+
+    hero.sprite.setFlipX((hero.moveDirection ?? 1) < 0);
+    hero.sprite.setAlpha(1);
+    hero.actionAura?.setAlpha(0);
+    hero.actionAura?.setScale(1);
+    hero.actionAura?.setStrokeStyle(2, hero.accent, 0);
+    hero.shadow?.setScale(1, 1);
+    hero.sprite.setX(0);
+
+    if (state === "move") {
+      hero.sprite.setAngle(Math.sin(phase) * 5);
+      hero.sprite.setY(-10 + Math.abs(Math.sin(phase)) * -4);
+      hero.sprite.setScale(1 + Math.sin(phase) * 0.025, 1 - Math.sin(phase) * 0.02);
+      hero.shadow?.setScale(1.05 - Math.abs(Math.sin(phase)) * 0.12, 1);
+      return;
+    }
+
+    if (state === "attack") {
+      const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 220, 0, 1);
+      const lunge = Math.sin(progress * Math.PI) * 9;
+      hero.sprite.setAngle(hero.id === "ergou" ? -14 : 10);
+      hero.sprite.setY(-10 - lunge * 0.35);
+      hero.sprite.setX((hero.sprite.flipX ? -1 : 1) * lunge);
+      hero.sprite.setScale(1.08, 0.94);
+      return;
+    }
+
+    if (state === "block") {
+      const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 300, 0, 1);
+      hero.sprite.setAngle(Math.sin(progress * Math.PI) * -8);
+      hero.sprite.setY(-7);
+      hero.sprite.setScale(1.12, 0.86);
+      hero.actionAura?.setAlpha(0.5 * (1 - progress));
+      hero.actionAura?.setScale(1.2 + progress * 0.65);
+      hero.actionAura?.setStrokeStyle(4, hero.accent, 0.72 * (1 - progress));
+      return;
+    }
+
+    if (state === "ultimate") {
+      const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 680, 0, 1);
+      hero.sprite.setAngle(Math.sin(progress * Math.PI * 3) * 8);
+      hero.sprite.setY(-14 + Math.sin(progress * Math.PI) * -8);
+      hero.sprite.setScale(1.2, 1.2);
+      hero.actionAura?.setAlpha(0.62 * (1 - progress));
+      hero.actionAura?.setScale(1.35 + progress * 1.1);
+      hero.actionAura?.setStrokeStyle(5, hero.accent, 0.82 * (1 - progress));
+      return;
+    }
+
+    hero.sprite.setY(-10 + Math.sin(phase * 0.45) * 1.2);
+    hero.sprite.setAngle(0);
+    hero.sprite.setScale(1);
+  }
+
+  setHeroAction(hero, state, duration) {
+    hero.actionState = state;
+    hero.actionUntil = this.time.now + duration;
+  }
+
+  playHeroAttackAction(hero, target) {
+    hero.moveDirection = target.sprite.x >= hero.x ? 1 : -1;
+    this.setHeroAction(hero, "attack", 220);
+  }
+
+  playHeroBlockAction(hero) {
+    this.setHeroAction(hero, "block", 300);
+    const shield = this.add.circle(hero.x, hero.y - 12, 22, hero.accent, 0.14)
+      .setStrokeStyle(4, hero.accent, 0.9)
+      .setDepth(25);
+    this.tweens.add({
+      targets: shield,
+      alpha: 0,
+      scale: 1.75,
+      duration: 300,
+      onComplete: () => shield.destroy(),
+    });
+  }
+
+  playHeroUltimateAction(hero, target) {
+    this.setHeroAction(hero, "ultimate", 680);
+    const color = hero.id === "tiezhu" ? 0x9fb8d6 : hero.id === "ergou" ? 0xffc34f : 0xdcc8ff;
+    const burst = this.add.circle(hero.x, hero.y - 12, 16, color, 0.18)
+      .setStrokeStyle(5, color, 0.86)
+      .setDepth(23);
+
+    this.tweens.add({
+      targets: burst,
+      alpha: 0,
+      scale: hero.id === "yueguang" ? 3.2 : 2.45,
+      duration: 620,
+      ease: "Sine.easeOut",
+      onComplete: () => burst.destroy(),
+    });
+
+    if (hero.id === "tiezhu") {
+      this.addHeroSlamEffect(hero, color);
+    } else if (hero.id === "ergou") {
+      this.addHeroBladeEffect(hero, target, color);
+    } else {
+      this.addHeroMoonEffect(hero, color);
+    }
+  }
+
+  addHeroSlamEffect(hero, color) {
+    [-18, 0, 18].forEach((offset, index) => {
+      const spark = this.add.rectangle(hero.x + offset, hero.y + 6, 7, 24, color, 0.8)
+        .setDepth(24)
+        .setAngle(offset * 0.8);
+      this.tweens.add({
+        targets: spark,
+        y: hero.y - 22,
+        alpha: 0,
+        duration: 260 + index * 70,
+        onComplete: () => spark.destroy(),
+      });
+    });
+  }
+
+  addHeroBladeEffect(hero, target, color) {
+    const slash = this.add.line(0, 0, hero.x - 22, hero.y + 8, target.sprite.x + 22, target.sprite.y - 22, color, 0.94)
+      .setLineWidth(6)
+      .setDepth(24);
+    this.heroEffects.push({ object: slash, ttl: 180, initialTtl: 180 });
+  }
+
+  addHeroMoonEffect(hero, color) {
+    const moon = this.add.arc(hero.x, hero.y - 18, 34, 210, 510, false, color, 0)
+      .setStrokeStyle(5, color, 0.88)
+      .setDepth(24);
+    this.heroEffects.push({ object: moon, ttl: 420, initialTtl: 420 });
   }
 
   updateHeroPortraits(time = this.time?.now ?? 0) {
@@ -1853,7 +2058,7 @@ export class GameScene extends Phaser.Scene {
   updateHeroEffects(delta) {
     this.heroEffects = this.heroEffects.filter((effect) => {
       effect.ttl -= delta;
-      effect.object.setAlpha(Math.max(0, effect.ttl / 110));
+      effect.object.setAlpha(Math.max(0, effect.ttl / (effect.initialTtl ?? 110)));
       if (effect.ttl <= 0) {
         effect.object.destroy();
         return false;
