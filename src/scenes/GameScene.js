@@ -295,7 +295,6 @@ export class GameScene extends Phaser.Scene {
     this.add.grid(PANEL_X / 2, GAME_HEIGHT / 2, PANEL_X, GAME_HEIGHT, 48, 48, 0x000000, 0, 0x6a9f4b, 0.1);
 
     this.drawTerrainPatches();
-    this.drawPath();
     this.drawBaseAndEntry();
     this.placeDecorations();
 
@@ -446,21 +445,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   drawBaseAndEntry() {
-    this.add.circle(22, 338, 28, 0xffcf45, 1)
+    this.add.circle(736, 324, 28, 0xffcf45, 1)
       .setStrokeStyle(5, 0x7a4b25, 0.9)
       .setDepth(4);
-    this.add.circle(22, 338, 18, 0xf7d76e, 0.86)
+    this.add.circle(736, 324, 18, 0xf7d76e, 0.86)
       .setDepth(4.1);
-    this.add.circle(626, 378, 28, 0xffcf45, 1)
+    this.add.circle(24, 338, 28, 0xffcf45, 1)
       .setStrokeStyle(5, 0x7a4b25, 0.9)
       .setDepth(4);
-    this.add.circle(626, 378, 18, 0xf7d76e, 0.86)
+    this.add.circle(24, 338, 18, 0xf7d76e, 0.86)
       .setDepth(4.1);
-    this.add.rectangle(740, 378, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1).setDepth(4.2);
-    this.add.rectangle(740, 352, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1).setDepth(4.3);
-    this.add.rectangle(740, 386, 18, 50, 0x4f2f18, 1).setDepth(4.4);
-    this.add.circle(736, 404, 2, 0xf6d37a, 1).setDepth(4.5);
-    this.add.text(710, 326, "前哨", {
+    this.add.rectangle(740, 324, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1).setDepth(4.2);
+    this.add.rectangle(740, 298, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1).setDepth(4.3);
+    this.add.rectangle(740, 332, 18, 50, 0x4f2f18, 1).setDepth(4.4);
+    this.add.circle(736, 350, 2, 0xf6d37a, 1).setDepth(4.5);
+    this.add.text(710, 272, "前哨", {
       ...TEXT_STYLE,
       fontSize: "16px",
       color: "#4b2c13",
@@ -567,23 +566,21 @@ export class GameScene extends Phaser.Scene {
 
   createSlots() {
     this.slots = TOWER_SLOTS.map(([x, y], index) => {
-      const platform = this.add.circle(x, y, 25, 0xb9b19c, 1)
-        .setStrokeStyle(4, 0x6a5a46, 1)
+      const platform = this.add.ellipse(x, y, 54, 36, 0x5a4028, 0.92)
+        .setStrokeStyle(4, 0x2f2415, 0.68)
         .setDepth(5)
         .setInteractive({ useHandCursor: true });
-      const inner = this.add.circle(x, y, 17, 0x786b56, 0.58)
-        .setStrokeStyle(2, 0xe6d7b3, 0.55)
+      const inner = this.add.ellipse(x, y + 1, 38, 22, 0x2d261d, 0.48)
+        .setStrokeStyle(2, 0x9d7a4c, 0.5)
         .setDepth(6)
         .setInteractive({ useHandCursor: true });
-      const plus = this.add.text(x, y - 1, "+", {
-        fontFamily: "Inter, system-ui, sans-serif",
-        fontSize: "25px",
-        color: "#f8edc7",
-      }).setOrigin(0.5).setDepth(7).setInteractive({ useHandCursor: true });
-      const slot = { index, x, y, platform, inner, plus, tower: null };
+      const rim = this.add.ellipse(x - 5, y - 7, 34, 9, 0xc7a36d, 0.24)
+        .setDepth(6.1)
+        .setInteractive({ useHandCursor: true });
+      const slot = { index, x, y, platform, inner, rim, tower: null };
       const click = () => this.handleSlotClick(slot);
 
-      [platform, inner, plus].forEach((item) => {
+      [platform, inner, rim].forEach((item) => {
         item.on("pointerover", () => this.previewBuildRange(slot));
         item.on("pointerout", () => this.clearHoverRange(slot));
         item.on("pointerdown", click);
@@ -1077,8 +1074,8 @@ export class GameScene extends Phaser.Scene {
 
     slot.tower = tower;
     slot.platform.setAlpha(0.42);
-    slot.inner.setAlpha(0.2);
-    slot.plus.setVisible(false);
+    slot.inner.setAlpha(0.16);
+    slot.rim.setAlpha(0.12);
     sprite.on("pointerdown", () => this.selectTower(tower));
     this.towers.push(tower);
     this.selectTower(tower);
@@ -1196,7 +1193,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const type = TOWER_TYPES[this.getPendingBuildType()];
-    slot.platform.setStrokeStyle(4, type.color, 0.95);
+    slot.platform.setStrokeStyle(4, type.color, 0.78);
     this.hoverRange?.destroy();
     this.hoverRange = this.add.circle(slot.x, slot.y, type.range, 0xffffff, 0)
       .setStrokeStyle(2, type.color, 0.24)
@@ -1205,7 +1202,7 @@ export class GameScene extends Phaser.Scene {
 
   clearHoverRange(slot) {
     if (!slot.tower) {
-      slot.platform.setStrokeStyle(4, 0x6a5a46, 1);
+      slot.platform.setStrokeStyle(4, 0x2f2415, 0.68);
     }
 
     this.hoverRange?.destroy();
@@ -2006,7 +2003,7 @@ export class GameScene extends Phaser.Scene {
     tower.slot.tower = null;
     tower.slot.platform.setAlpha(1);
     tower.slot.inner.setAlpha(1);
-    tower.slot.plus.setVisible(true);
+    tower.slot.rim.setAlpha(1);
     tower.shadow.destroy();
     tower.sprite.destroy();
     tower.levelText.destroy();
