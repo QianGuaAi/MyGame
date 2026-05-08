@@ -1,7 +1,10 @@
 ﻿import Phaser from "phaser";
+import { CHAPTERS, getChapterByLevelId } from "../data/chapters.js";
 import { EASTER_EGGS } from "../data/easterEggs.js";
+import { ENEMY_SHEETS, pickWaveMonsterTypes } from "../data/monsters.js";
 import { BASIC_SHOP_ITEMS, EQUIPMENT_CATALOG, RARITY_CONFIG } from "../data/equipment.js";
 import { HERO_DEFS } from "../data/heroes.js";
+import { DEFAULT_LEVEL_ID, LEVELS, getLevelCompleteKey, isWildMerchantLevel } from "../data/levels.js";
 import {
   DECORATIONS,
   GAME_HEIGHT,
@@ -36,13 +39,88 @@ const TOWER_TEXTURE_KEYS = {
   flame: "tower-flame",
   altar: "tower-altar",
 };
+const TOWER_STATE_ASSETS = {
+  arrow: {
+    l1: new URL("../assets/towers/arrow-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/arrow-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/arrow-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/arrow-attack.png", import.meta.url).href,
+    branches: {
+      burst: new URL("../assets/towers/arrow-branch-burst.png", import.meta.url).href,
+      hawk: new URL("../assets/towers/arrow-branch-hawk.png", import.meta.url).href,
+    },
+  },
+  mage: {
+    l1: new URL("../assets/towers/mage-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/mage-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/mage-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/mage-attack.png", import.meta.url).href,
+    branches: {
+      arcane: new URL("../assets/towers/mage-branch-arcane.png", import.meta.url).href,
+      meteor: new URL("../assets/towers/mage-branch-meteor.png", import.meta.url).href,
+    },
+  },
+  barracks: {
+    l1: new URL("../assets/towers/barracks-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/barracks-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/barracks-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/barracks-attack.png", import.meta.url).href,
+    branches: {
+      veteran: new URL("../assets/towers/barracks-branch-veteran.png", import.meta.url).href,
+      reserve: new URL("../assets/towers/barracks-branch-reserve.png", import.meta.url).href,
+    },
+  },
+  artillery: {
+    l1: new URL("../assets/towers/artillery-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/artillery-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/artillery-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/artillery-attack.png", import.meta.url).href,
+    branches: {
+      shrapnel: new URL("../assets/towers/artillery-branch-shrapnel.png", import.meta.url).href,
+      rapid: new URL("../assets/towers/artillery-branch-rapid.png", import.meta.url).href,
+    },
+  },
+  flame: {
+    l1: new URL("../assets/towers/flame-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/flame-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/flame-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/flame-attack.png", import.meta.url).href,
+    branches: {
+      inferno: new URL("../assets/towers/flame-branch-inferno.png", import.meta.url).href,
+      wildfire: new URL("../assets/towers/flame-branch-wildfire.png", import.meta.url).href,
+    },
+  },
+};
+const HERO_POSES = ["move", "attack", "block"];
+const HERO_TEXTURE_SIZE = 46;
+const HERO_POSE_ASSETS = {
+  tiezhu: {
+    move: new URL("../assets/heroes/tiezhu-move.png", import.meta.url).href,
+    attack: new URL("../assets/heroes/tiezhu-attack.png", import.meta.url).href,
+    block: new URL("../assets/heroes/tiezhu-block.png", import.meta.url).href,
+  },
+  ergou: {
+    move: new URL("../assets/heroes/ergou-move.png", import.meta.url).href,
+    attack: new URL("../assets/heroes/ergou-attack.png", import.meta.url).href,
+    block: new URL("../assets/heroes/ergou-block.png", import.meta.url).href,
+  },
+  yueguang: {
+    move: new URL("../assets/heroes/yueguang-move.png", import.meta.url).href,
+    attack: new URL("../assets/heroes/yueguang-attack.png", import.meta.url).href,
+    block: new URL("../assets/heroes/yueguang-block.png", import.meta.url).href,
+  },
+};
 
 export class GameScene extends Phaser.Scene {
   constructor() {
     super("GameScene");
   }
 
-  init() {
+  init(data = {}) {
+    this.levelId = data?.levelId ?? DEFAULT_LEVEL_ID;
+    this.levelConfig = LEVELS[this.levelId] ?? LEVELS[DEFAULT_LEVEL_ID];
+    this.chapter = getChapterByLevelId(this.levelId);
+    this.totalWaves = this.levelConfig.waveCount ?? TOTAL_WAVES;
     this.gold = 160;
     this.lives = 20;
     this.wave = 0;
@@ -75,12 +153,30 @@ export class GameScene extends Phaser.Scene {
     this.defeatedWaves = 0;
     this.nextSpawnAt = 0;
     this.spawnEvery = 820;
-    this.claimedEasterEggs = new Set(JSON.parse(localStorage.getItem("crown-outpost-easter-eggs") || "[]"));
+    this.claimedEasterEggs = this.loadClaimedEasterEggs();
     this.createHeroState();
   }
 
   preload() {
     this.loadHeroAssets();
+    this.loadChapterMaps();
+    this.loadEnemySheets();
+  }
+
+  loadChapterMaps() {
+    CHAPTERS.forEach((chapter) => {
+      if (!this.textures.exists(chapter.mapKey)) {
+        this.load.image(chapter.mapKey, chapter.mapUrl);
+      }
+    });
+  }
+
+  loadEnemySheets() {
+    ENEMY_SHEETS.forEach((sheet) => {
+      if (!this.textures.exists(sheet.key)) {
+        this.load.image(sheet.key, sheet.url);
+      }
+    });
   }
 
   create() {
@@ -139,6 +235,7 @@ export class GameScene extends Phaser.Scene {
         actionState: "idle",
         actionUntil: 0,
         attackCount: 0,
+        blockStreak: 0,
         dead: false,
         respawnAt: 0,
       };
@@ -161,6 +258,11 @@ export class GameScene extends Phaser.Scene {
     this.load.image("hero-tiezhu", new URL("../assets/heroes/tiezhu.png", import.meta.url).href);
     this.load.image("hero-ergou", new URL("../assets/heroes/ergou.png", import.meta.url).href);
     this.load.image("hero-yueguang", new URL("../assets/heroes/yueguang.png", import.meta.url).href);
+    Object.entries(HERO_POSE_ASSETS).forEach(([heroId, poses]) => {
+      Object.entries(poses).forEach(([pose, assetUrl]) => {
+        this.load.image(`hero-${heroId}-${pose}`, assetUrl);
+      });
+    });
     this.load.image("tower-arrow", new URL("../assets/towers/arrow.png", import.meta.url).href);
     this.load.image("tower-mage", new URL("../assets/towers/mage.png", import.meta.url).href);
     this.load.image("tower-barracks", new URL("../assets/towers/barracks.png", import.meta.url).href);
@@ -168,12 +270,29 @@ export class GameScene extends Phaser.Scene {
     this.load.image("tower-frost", new URL("../assets/towers/frost.png", import.meta.url).href);
     this.load.image("tower-flame", new URL("../assets/towers/flame.png", import.meta.url).href);
     this.load.image("tower-altar", new URL("../assets/towers/altar.png", import.meta.url).href);
+    Object.entries(TOWER_STATE_ASSETS).forEach(([typeKey, assets]) => {
+      ["l1", "l2", "l3", "attack"].forEach((state) => {
+        this.load.image(`tower-${typeKey}-${state}`, assets[state]);
+      });
+      Object.entries(assets.branches).forEach(([branchKey, assetUrl]) => {
+        this.load.image(`tower-${typeKey}-branch-${branchKey}`, assetUrl);
+      });
+    });
   }
 
   createMap() {
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x87b866).setOrigin(0);
-    this.add.rectangle(0, 0, PANEL_X, GAME_HEIGHT, 0x9bcf73, 0.62).setOrigin(0);
-    this.add.grid(PANEL_X / 2, GAME_HEIGHT / 2, PANEL_X, GAME_HEIGHT, 48, 48, 0x000000, 0, 0x6a9f4b, 0.16);
+
+    const chapterMapKey = this.chapter?.mapKey;
+    if (chapterMapKey && this.textures.exists(chapterMapKey)) {
+      this.add.image(0, 0, chapterMapKey)
+        .setOrigin(0)
+        .setDisplaySize(PANEL_X, GAME_HEIGHT)
+        .setAlpha(0.92);
+    } else {
+      this.add.rectangle(0, 0, PANEL_X, GAME_HEIGHT, 0x9bcf73, 0.62).setOrigin(0);
+    }
+    this.add.grid(PANEL_X / 2, GAME_HEIGHT / 2, PANEL_X, GAME_HEIGHT, 48, 48, 0x000000, 0, 0x6a9f4b, 0.1);
 
     this.drawTerrainPatches();
     this.drawPath();
@@ -366,6 +485,10 @@ export class GameScene extends Phaser.Scene {
     this.easterEggObjects = [];
 
     EASTER_EGGS.forEach((egg) => {
+      if (egg.virtual) {
+        return;
+      }
+
       if (this.claimedEasterEggs.has(egg.id)) {
         return;
       }
@@ -397,7 +520,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.claimedEasterEggs.add(egg.id);
-    localStorage.setItem("crown-outpost-easter-eggs", JSON.stringify([...this.claimedEasterEggs]));
+    this.saveClaimedEasterEggs();
     objects.forEach((item) => item.destroy());
 
     if (egg.fragment) {
@@ -409,6 +532,37 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.updateUi();
+  }
+
+  loadClaimedEasterEggs() {
+    const oldKey = "crown-outpost-easter-eggs";
+    const newKey = "crown-outpost-easter-eggs-v2";
+    const parseJson = (value, fallback) => {
+      try {
+        return value ? JSON.parse(value) : fallback;
+      } catch {
+        return fallback;
+      }
+    };
+    const existing = localStorage.getItem(newKey);
+
+    if (existing) {
+      const byChapter = parseJson(existing, {});
+      return new Set(byChapter["0"] ?? []);
+    }
+
+    const oldClaimed = parseJson(localStorage.getItem(oldKey), []);
+    localStorage.setItem(newKey, JSON.stringify({ 0: oldClaimed }));
+    return new Set(oldClaimed);
+  }
+
+  saveClaimedEasterEggs() {
+    const oldKey = "crown-outpost-easter-eggs";
+    const newKey = "crown-outpost-easter-eggs-v2";
+    const claimed = [...this.claimedEasterEggs];
+
+    localStorage.setItem(newKey, JSON.stringify({ 0: claimed }));
+    localStorage.setItem(oldKey, JSON.stringify(claimed));
   }
 
   createSlots() {
@@ -448,7 +602,7 @@ export class GameScene extends Phaser.Scene {
       const actionAura = this.add.circle(0, -8, 18, hero.accent, 0)
         .setStrokeStyle(2, hero.accent, 0);
       const sprite = this.add.image(0, -8, `hero-${hero.id}`)
-        .setDisplaySize(HERO_FIELD_SIZE, HERO_FIELD_SIZE);
+        .setDisplaySize(HERO_TEXTURE_SIZE, HERO_TEXTURE_SIZE);
       const name = this.add.text(0, 18, hero.name, {
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: "12px",
@@ -854,7 +1008,20 @@ export class GameScene extends Phaser.Scene {
     return TOWER_TYPES[typeKey] ? typeKey : "arrow";
   }
 
-  getTowerTextureKey(typeKey) {
+  getTowerTextureKey(typeKey, level = 1, branch = null, state = "base") {
+    if (state === "attack" && this.textures.exists(`tower-${typeKey}-attack`)) {
+      return `tower-${typeKey}-attack`;
+    }
+
+    if (branch && this.textures.exists(`tower-${typeKey}-branch-${branch}`)) {
+      return `tower-${typeKey}-branch-${branch}`;
+    }
+
+    const levelKey = `tower-${typeKey}-l${Phaser.Math.Clamp(level, 1, 3)}`;
+    if (this.textures.exists(levelKey)) {
+      return levelKey;
+    }
+
     return TOWER_TEXTURE_KEYS[typeKey] ?? TOWER_TYPES[typeKey]?.texture ?? TOWER_TEXTURE_KEYS.arrow;
   }
 
@@ -875,7 +1042,7 @@ export class GameScene extends Phaser.Scene {
 
     this.gold -= type.price;
     const shadow = this.add.ellipse(slot.x, slot.y + 19, 48, 14, 0x2f2415, 0.22).setDepth(7);
-    const textureKey = this.getTowerTextureKey(safeTypeKey);
+    const textureKey = this.getTowerTextureKey(safeTypeKey, 1);
     const sprite = this.add.image(slot.x, slot.y - 14, textureKey)
       .setDisplaySize(TOWER_DISPLAY_SIZE_BY_LEVEL[0], TOWER_DISPLAY_SIZE_BY_LEVEL[0])
       .setDepth(9)
@@ -1097,7 +1264,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   startWave() {
-    if (this.prepPhase || this.waveActive || this.gameEnded || this.modalOpen || this.paused || this.wave >= TOTAL_WAVES) {
+    if (this.prepPhase || this.waveActive || this.gameEnded || this.modalOpen || this.paused || this.wave >= this.totalWaves) {
       return;
     }
 
@@ -1109,8 +1276,58 @@ export class GameScene extends Phaser.Scene {
     this.enemiesThisWave = this.getWaveEnemyTotal(this.wave);
     this.spawnEvery = Math.max(410, 860 - this.wave * 32);
     this.nextSpawnAt = this.time.now + 450;
-    this.showNotice(`第 ${this.wave}/${TOTAL_WAVES} 波来袭`, "#7a3d12");
+    this.waveMonsterPool = this.buildWaveMonsterPool(this.wave);
+    this.showNotice(`第 ${this.wave}/${this.totalWaves} 波来袭`, "#7a3d12");
     this.updateUi();
+  }
+
+  buildWaveMonsterPool(wave) {
+    const types = pickWaveMonsterTypes(wave);
+    return types
+      .map((monster) => {
+        const frameKey = this.ensureMonsterFrame(monster);
+        return frameKey ? { ...monster, frameKey } : null;
+      })
+      .filter(Boolean);
+  }
+
+  pickWaveMonster(rank) {
+    const pool = this.waveMonsterPool;
+    if (!pool || pool.length === 0) {
+      return null;
+    }
+    // Boss / elite 倾向于 tier 较高的怪
+    let candidates = pool;
+    if (rank === "boss" || rank === "elite") {
+      const maxTier = Math.max(...pool.map((m) => m.tier));
+      candidates = pool.filter((m) => m.tier === maxTier);
+    } else if (rank === "heavy") {
+      const sorted = [...pool].sort((a, b) => b.tier - a.tier);
+      candidates = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2)));
+    }
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  ensureMonsterFrame(monster) {
+    const tex = this.textures.get(monster.sheetKey);
+    if (!tex || tex.key === "__MISSING") {
+      return null;
+    }
+    const frameName = monster.id;
+    if (!tex.has(frameName)) {
+      const source = tex.source[0];
+      if (!source) {
+        return null;
+      }
+      const maxW = source.width;
+      const maxH = source.height;
+      const x = Math.min(monster.frame.x, maxW - 1);
+      const y = Math.min(monster.frame.y, maxH - 1);
+      const w = Math.min(monster.frame.w, maxW - x);
+      const h = Math.min(monster.frame.h, maxH - y);
+      tex.add(frameName, 0, x, y, w, h);
+    }
+    return frameName;
   }
 
   getWaveEnemyTotal(wave) {
@@ -1131,8 +1348,12 @@ export class GameScene extends Phaser.Scene {
   getSpawnRank() {
     const isLast = this.spawnedThisWave === this.enemiesThisWave - 1;
 
-    if (this.wave === TOTAL_WAVES && isLast) {
+    if ((this.levelConfig.enemyMix === "boss" || this.wave === this.totalWaves) && this.wave === this.totalWaves && isLast) {
       return "boss";
+    }
+
+    if (this.levelConfig.enemyMix === "rare-mix" && this.wave >= 3 && Math.random() < 0.3) {
+      return "rare";
     }
 
     if (this.wave >= 4 && isLast && this.wave % 2 === 0) {
@@ -1160,14 +1381,26 @@ export class GameScene extends Phaser.Scene {
       boss: { hp: 620, hpGrowth: 88, reward: 120, rewardGrowth: 10, speed: 34, texture: "enemy-brute", tint: 0xffcf70, scale: 1.35, damage: 22 },
     };
     const stats = rankStats[rank];
-    const maxHp = Math.round(stats.hp + waveScale * stats.hpGrowth);
-    const reward = Math.round(stats.reward + this.wave * stats.rewardGrowth);
+    const hpMultiplier = this.levelConfig.enemyMix === "tougher" ? 1.2 : this.levelConfig.enemyMix === "boss" ? 1.1 : 1;
+    const monster = this.pickWaveMonster(rank);
+    const tierScale = monster ? 1 + (monster.tier - 1) * 0.06 : 1;
+    const maxHp = Math.round((stats.hp + waveScale * stats.hpGrowth) * hpMultiplier * tierScale);
+    const reward = Math.round((stats.reward + this.wave * stats.rewardGrowth) * (monster ? 1 + (monster.tier - 1) * 0.05 : 1));
     const point = pointOnPath(0);
-    const sprite = this.add.sprite(point.x, point.y, stats.texture)
-      .setRotation(point.angle)
-      .setScale(stats.scale)
-      .setTint(stats.tint)
+    const useSheet = monster && this.textures.exists(monster.sheetKey) && this.textures.get(monster.sheetKey).has(monster.frameKey);
+    const textureKey = useSheet ? monster.sheetKey : stats.texture;
+    const frameKey = useSheet ? monster.frameKey : undefined;
+    const sprite = this.add.sprite(point.x, point.y, textureKey, frameKey)
+      .setRotation(useSheet ? 0 : point.angle)
       .setDepth(18);
+    if (useSheet) {
+      const targetSize = (rank === "boss" ? 56 : rank === "elite" ? 46 : rank === "heavy" ? 42 : 36) * stats.scale;
+      const maxDim = Math.max(monster.frame.w, monster.frame.h);
+      const fit = targetSize / maxDim;
+      sprite.setScale(fit);
+    } else {
+      sprite.setScale(stats.scale).setTint(stats.tint);
+    }
     const barWidth = rank === "boss" ? 58 : rank === "elite" ? 48 : rank === "heavy" ? 40 : 32;
     const barBack = this.add.rectangle(point.x - barWidth / 2, point.y - 28, barWidth, 5, 0x3b2415, 0.9)
       .setOrigin(0, 0.5)
@@ -1183,7 +1416,8 @@ export class GameScene extends Phaser.Scene {
       hp: maxHp,
       reward,
       progress: 0,
-      speed: stats.speed + (rank === "normal" || rank === "rare" ? Math.min(28, this.wave * 3) : Math.min(18, this.wave * 2)),
+      speed: (stats.speed + (rank === "normal" || rank === "rare" ? Math.min(28, this.wave * 3) : Math.min(18, this.wave * 2)))
+        * (this.levelConfig.enemyMix === "tougher" ? 0.96 : 1),
       alive: true,
       isHeavy: rank === "heavy" || rank === "elite" || rank === "boss",
       rank,
@@ -1193,7 +1427,8 @@ export class GameScene extends Phaser.Scene {
       slowFactor: 1,
       burnUntil: 0,
       burnDps: 0,
-      baseTint: stats.tint,
+      baseTint: useSheet ? 0xffffff : stats.tint,
+      usesSheet: useSheet,
       barWidth,
     };
 
@@ -1232,7 +1467,9 @@ export class GameScene extends Phaser.Scene {
 
       const point = pointOnPath(enemy.progress);
       enemy.sprite.setPosition(point.x, point.y);
-      enemy.sprite.setRotation(point.angle);
+      if (!enemy.usesSheet) {
+        enemy.sprite.setRotation(point.angle);
+      }
       enemy.sprite.setTint(slowed ? 0xb8d9ff : burning ? 0xff9b55 : enemy.baseTint);
       enemy.barBack.setPosition(point.x - enemy.barWidth / 2, point.y - 28);
       enemy.barFill.setPosition(point.x - enemy.barWidth / 2, point.y - 28);
@@ -1395,10 +1632,15 @@ export class GameScene extends Phaser.Scene {
     const recoil = tower.typeKey === "artillery" ? 8 : 4;
     const flashX = tower.x + Math.cos(angle) * 18;
     const flashY = tower.y - 16 + Math.sin(angle) * 18;
+    const baseTextureKey = this.getTowerTextureKey(tower.typeKey, tower.level, tower.branch);
+    const attackTextureKey = this.getTowerTextureKey(tower.typeKey, tower.level, tower.branch, "attack");
 
     this.tweens.killTweensOf(tower.sprite);
     tower.sprite.setPosition(tower.x, tower.y - 14);
     tower.sprite.setAngle(0);
+    if (attackTextureKey !== baseTextureKey) {
+      tower.sprite.setTexture(attackTextureKey);
+    }
     this.tweens.add({
       targets: tower.sprite,
       x: tower.x - Math.cos(angle) * recoil,
@@ -1407,6 +1649,7 @@ export class GameScene extends Phaser.Scene {
       yoyo: true,
       duration: tower.typeKey === "artillery" ? 95 : 70,
       onComplete: () => {
+        tower.sprite.setTexture(baseTextureKey);
         tower.sprite.setPosition(tower.x, tower.y - 14);
         tower.sprite.setAngle(0);
       },
@@ -1605,10 +1848,23 @@ export class GameScene extends Phaser.Scene {
     const rates = {
       normal: 0.02,
       heavy: 0.035,
-      rare: 0.12,
-      elite: 0.2,
+      rare: this.levelConfig.enemyMix === "rare-mix" ? 0.18 : 0.12,
+      elite: this.levelConfig.enemyMix === "rare-mix" ? 0.24 : 0.2,
       boss: 1,
     };
+
+    if (this.levelId === "chapter-1-boss" && enemy.rank === "boss") {
+      if (Math.random() < 0.5) {
+        const rarity = Math.random() < 0.6 ? "稀有" : "史诗";
+        const item = this.createEquipment(pickRandom(BASIC_SHOP_ITEMS), rarity);
+        this.inventory.push(item);
+        this.showNotice(`Boss 必掉：${item.name} 已进背包`, RARITY_CONFIG[rarity].color);
+      } else {
+        this.addBlueprintFragment();
+        this.showNotice("Boss 必掉：图纸碎片 +1", "#5a4ba6");
+      }
+      return;
+    }
 
     if (Math.random() > (rates[enemy.rank] ?? 0.02)) {
       return;
@@ -1640,13 +1896,8 @@ export class GameScene extends Phaser.Scene {
     localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
     this.recoverHeroes(0.38);
 
-    if (this.wave >= TOTAL_WAVES) {
-      this.openMerchant("elite", true);
-      return;
-    }
-
-    if (this.wave % 3 === 0) {
-      this.openMerchant("wild", false);
+    if (this.wave >= this.totalWaves) {
+      this.finishVictorySequence();
       return;
     }
 
@@ -1735,13 +1986,13 @@ export class GameScene extends Phaser.Scene {
   applyTowerVisual(tower) {
     tower.levelText.setText(["I", "II", "III", "IV"][tower.level - 1]);
     const displaySize = TOWER_DISPLAY_SIZE_BY_LEVEL[tower.level - 1] ?? TOWER_DISPLAY_SIZE_BY_LEVEL.at(-1);
+    const textureKey = this.getTowerTextureKey(tower.typeKey, tower.level, tower.branch);
+    if (tower.textureKey !== textureKey) {
+      tower.sprite.setTexture(textureKey);
+      tower.textureKey = textureKey;
+    }
     tower.sprite.setDisplaySize(displaySize, displaySize);
     tower.sprite.clearTint();
-    if (tower.branch === "burst") {
-      tower.sprite.setTint(0xffb071);
-    } else if (tower.branch === "hawk") {
-      tower.sprite.setTint(0xb8deff);
-    }
   }
 
   sellSelectedTower() {
@@ -2119,6 +2370,13 @@ export class GameScene extends Phaser.Scene {
       blocked = true;
     }
 
+    if (hero.id === "tiezhu") {
+      hero.blockStreak = blocked ? (hero.blockStreak ?? 0) + 1 : 0;
+      if (blocked) {
+        this.tryClaimTiezhuBlockStreak(hero);
+      }
+    }
+
     hero.hp -= damage;
     if (blocked) {
       this.playHeroBlockAction(hero);
@@ -2128,6 +2386,7 @@ export class GameScene extends Phaser.Scene {
     if (hero.hp <= 0) {
       hero.hp = 0;
       hero.dead = true;
+      hero.blockStreak = 0;
       hero.respawnAt = this.time.now + HERO_RESPAWN_MS;
       hero.group.setAlpha(0.42);
       if (this.selectedHero === hero) {
@@ -2138,6 +2397,21 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.updateHeroSprite(hero);
+    this.updateUi();
+  }
+
+  tryClaimTiezhuBlockStreak(hero) {
+    const egg = EASTER_EGGS.find((item) => item.id === "tiezhu-block-streak");
+
+    if (!egg || this.claimedEasterEggs.has(egg.id) || hero.blockStreak < egg.threshold) {
+      return;
+    }
+
+    this.gold += egg.reward;
+    this.claimedEasterEggs.add(egg.id);
+    this.saveClaimedEasterEggs();
+    this.showNotice("彩蛋：铁壁连防 +50 金币", "#315c22");
+    hero.blockStreak = 0;
     this.updateUi();
   }
 
@@ -2174,6 +2448,7 @@ export class GameScene extends Phaser.Scene {
     const state = actionActive ? hero.actionState : moving ? "move" : "idle";
     const phase = time * 0.012 + (hero.id === "ergou" ? 1.2 : hero.id === "yueguang" ? 2.4 : 0);
 
+    this.setHeroPoseTexture(hero, state);
     hero.sprite.setFlipX((hero.moveDirection ?? 1) < 0);
     hero.sprite.setAlpha(1);
     hero.actionAura?.setAlpha(0);
@@ -2225,6 +2500,16 @@ export class GameScene extends Phaser.Scene {
     hero.sprite.setY(-8 + Math.sin(phase * 0.45) * 1);
     hero.sprite.setAngle(0);
     this.setHeroSpritePoseScale(hero, 1, 1);
+  }
+
+  setHeroPoseTexture(hero, state) {
+    const pose = state === "ultimate" ? "block" : state;
+    const textureKey = HERO_POSES.includes(pose) ? `hero-${hero.id}-${pose}` : `hero-${hero.id}`;
+
+    if (hero.currentTextureKey !== textureKey && this.textures.exists(textureKey)) {
+      hero.sprite.setTexture(textureKey);
+      hero.currentTextureKey = textureKey;
+    }
   }
 
   setHeroSpritePoseScale(hero, scaleX, scaleY = scaleX) {
@@ -2568,7 +2853,11 @@ export class GameScene extends Phaser.Scene {
       if (final) {
         this.finishVictory();
       } else {
-        this.startPrepPhase(30);
+        if (this.pendingCampaignReturn) {
+          this.finishVictory();
+        } else {
+          this.startPrepPhase(30);
+        }
       }
     });
   }
@@ -2714,17 +3003,37 @@ export class GameScene extends Phaser.Scene {
 
   finishVictory() {
     this.gameEnded = true;
-    this.bestWave = TOTAL_WAVES;
+    this.bestWave = this.totalWaves;
     localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
     localStorage.setItem("crown-outpost-last-score", String(this.score));
-    localStorage.setItem("crown-outpost-chapter-1-level-1-complete", "true");
+    localStorage.setItem(getLevelCompleteKey(this.levelId), "true");
     this.waveActive = false;
-    this.showNotice("第一关完成，返回章节地图", "#315c22");
+    this.showNotice(`${this.levelConfig.name} 完成，返回章节地图`, "#315c22");
     this.updateUi();
+    this.returnToCampaign();
+  }
+
+  finishVictorySequence() {
+    if (this.levelId === "chapter-1-boss") {
+      this.openMerchant("elite", true);
+      return;
+    }
+
+    if (isWildMerchantLevel(this.levelId)) {
+      this.pendingCampaignReturn = true;
+      this.openMerchant("wild", false);
+      return;
+    }
+
+    this.finishVictory();
+  }
+
+  returnToCampaign() {
+    this.pendingCampaignReturn = false;
     this.cameras.main.fadeOut(420, 32, 21, 13);
     this.time.delayedCall(440, () => {
       this.scene.start("CampaignScene", {
-        completedLevelId: "chapter-1-level-1",
+        completedLevelId: this.levelId,
         gold: this.gold,
         score: this.score,
       });
@@ -2748,23 +3057,23 @@ export class GameScene extends Phaser.Scene {
     }
 
     const remainingEnemies = this.getRemainingEnemiesInWave();
-    const waveLabel = this.wave > 0 ? `${this.wave}/${TOTAL_WAVES}` : `0/${TOTAL_WAVES}`;
+    const waveLabel = this.wave > 0 ? `${this.wave}/${this.totalWaves}` : `0/${this.totalWaves}`;
     const heroHp = this.heroes.map((hero) => `${hero.name.slice(1)} ${Math.ceil(hero.hp)}/${hero.stats.maxHp}`).join("  ");
     this.hudText.setText(
       `金币 ${this.gold}  生命 ${Math.max(this.lives, 0)}  第 ${waveLabel} 波  敌人 ${remainingEnemies}  背包 ${this.inventory.length}  碎片 ${this.blueprintFragments}/3  得分 ${this.score}\n${heroHp}`,
     );
 
-    if (this.wave >= TOTAL_WAVES && !this.waveActive) {
+    if (this.wave >= this.totalWaves && !this.waveActive) {
       this.setButtonLabel(this.startButton, "波次已完成");
     } else if (this.prepPhase) {
       this.setButtonLabel(this.startButton, `立即开始 +${Math.floor(this.prepCountdown)}`);
     } else {
-      this.setButtonLabel(this.startButton, this.waveActive ? `第 ${this.wave}/${TOTAL_WAVES} 波中` : `开始第 ${this.wave + 1}/${TOTAL_WAVES} 波`);
+      this.setButtonLabel(this.startButton, this.waveActive ? `第 ${this.wave}/${this.totalWaves} 波中` : `开始第 ${this.wave + 1}/${this.totalWaves} 波`);
     }
 
     this.setButtonLabel(this.pauseButton, this.paused ? "继续" : "暂停");
     this.setButtonEnabled(this.pauseButton, !this.gameEnded && !this.modalOpen);
-    this.setButtonEnabled(this.startButton, (this.prepPhase || (!this.waveActive && this.wave < TOTAL_WAVES)) && !this.gameEnded && !this.modalOpen && !this.paused);
+    this.setButtonEnabled(this.startButton, (this.prepPhase || (!this.waveActive && this.wave < this.totalWaves)) && !this.gameEnded && !this.modalOpen && !this.paused);
     this.setButtonLabel(this.inventoryButton, `背包 ${this.inventory.length}`);
     this.updateHeroPortraits();
     this.updateTowerButtons();

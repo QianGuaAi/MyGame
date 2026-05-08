@@ -1,39 +1,12 @@
 import Phaser from "phaser";
+import { CHAPTER_ONE_LEVEL_ORDER, DEFAULT_LEVEL_ID, getLevelCompleteKey } from "../data/levels.js";
 import { GAME_HEIGHT, GAME_WIDTH, TEXT_STYLE } from "../data/map.js";
 
-const LEVELS = [
-  {
-    id: "chapter-1-level-1",
-    label: "1-1",
-    name: "王冠前哨",
-    x: 178,
-    y: 360,
-    status: "completed",
-  },
-  {
-    id: "chapter-1-level-2",
-    label: "1-2",
-    name: "北桥林道",
-    x: 392,
-    y: 292,
-    status: "next",
-  },
-  {
-    id: "chapter-1-level-3",
-    label: "1-3",
-    name: "旧王城门",
-    x: 620,
-    y: 214,
-    status: "locked",
-  },
-  {
-    id: "chapter-1-boss",
-    label: "BOSS",
-    name: "黑石要塞",
-    x: 794,
-    y: 312,
-    status: "locked",
-  },
+const LEVEL_NODES = [
+  { id: "chapter-1-level-1", label: "1-1", name: "王冠前哨", x: 178, y: 360 },
+  { id: "chapter-1-level-2", label: "1-2", name: "北桥林道", x: 392, y: 292 },
+  { id: "chapter-1-level-3", label: "1-3", name: "旧王城门", x: 620, y: 214 },
+  { id: "chapter-1-boss", label: "BOSS", name: "黑石要塞", x: 794, y: 312 },
 ];
 
 export class CampaignScene extends Phaser.Scene {
@@ -42,11 +15,35 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   init(data = {}) {
+    this.levels = this.buildLevelStates(data.completedLevelId);
     this.result = {
       score: data.score ?? Number(localStorage.getItem("crown-outpost-last-score") || 0),
       gold: data.gold ?? 0,
-      completedLevelId: data.completedLevelId ?? "chapter-1-level-1",
+      completedLevelId: data.completedLevelId ?? DEFAULT_LEVEL_ID,
     };
+  }
+
+  buildLevelStates(completedLevelId) {
+    if (completedLevelId) {
+      localStorage.setItem(getLevelCompleteKey(completedLevelId), "true");
+    }
+
+    const completedIds = new Set();
+    CHAPTER_ONE_LEVEL_ORDER.forEach((levelId) => {
+      if (localStorage.getItem(getLevelCompleteKey(levelId)) === "true") {
+        completedIds.add(levelId);
+      }
+    });
+
+    if (localStorage.getItem("crown-outpost-chapter-1-level-1-complete") === "true") {
+      completedIds.add(DEFAULT_LEVEL_ID);
+    }
+
+    const nextIndex = CHAPTER_ONE_LEVEL_ORDER.findIndex((levelId) => !completedIds.has(levelId));
+    return LEVEL_NODES.map((level, index) => ({
+      ...level,
+      status: completedIds.has(level.id) ? "completed" : index === nextIndex ? "next" : "locked",
+    }));
   }
 
   create() {
@@ -178,13 +175,13 @@ export class CampaignScene extends Phaser.Scene {
 
   strokeRoute(graphics) {
     graphics.beginPath();
-    graphics.moveTo(LEVELS[0].x, LEVELS[0].y);
-    LEVELS.slice(1).forEach((level) => graphics.lineTo(level.x, level.y));
+    graphics.moveTo(this.levels[0].x, this.levels[0].y);
+    this.levels.slice(1).forEach((level) => graphics.lineTo(level.x, level.y));
     graphics.strokePath();
   }
 
   drawLevelNodes() {
-    LEVELS.forEach((level) => {
+    this.levels.forEach((level) => {
       const isCompleted = level.status === "completed";
       const isNext = level.status === "next";
       const fill = isCompleted ? 0xf4c542 : isNext ? 0xe46c3b : 0x8a8a72;
@@ -211,12 +208,11 @@ export class CampaignScene extends Phaser.Scene {
       if (isCompleted) {
         node.add(this.createStars(0, -42));
       } else if (!isNext) {
-        const lock = this.add.text(0, -42, "锁定", {
+        node.add(this.add.text(0, -42, "锁定", {
           ...TEXT_STYLE,
           fontSize: "12px",
           color: "#4c3a25",
-        }).setOrigin(0.5);
-        node.add(lock);
+        }).setOrigin(0.5));
       }
 
       node.setSize(100, 108);
@@ -240,13 +236,13 @@ export class CampaignScene extends Phaser.Scene {
   drawHeader() {
     this.add.rectangle(GAME_WIDTH / 2, 48, 728, 62, 0x58361b, 0.92)
       .setStrokeStyle(4, 0xf2ca73, 1);
-    this.add.text(GAME_WIDTH / 2, 33, "第一章  边境林道", {
+    this.add.text(GAME_WIDTH / 2, 33, "第一章 边境林道", {
       ...TEXT_STYLE,
       fontSize: "27px",
       color: "#fff1bd",
       align: "center",
     }).setOrigin(0.5);
-    this.add.text(GAME_WIDTH / 2, 62, "第一关已完成，前哨地图已解锁", {
+    this.add.text(GAME_WIDTH / 2, 62, "完成当前节点后解锁下一关", {
       ...TEXT_STYLE,
       fontSize: "14px",
       color: "#f2d994",
@@ -263,13 +259,13 @@ export class CampaignScene extends Phaser.Scene {
       color: "#fff1bd",
     }).setOrigin(0, 0.5);
 
-    this.createButton(650, 504, 138, 34, "重玩第一关", () => this.scene.start("GameScene"), {
+    this.createButton(650, 504, 138, 34, "重玩第一关", () => this.scene.start("GameScene", { levelId: DEFAULT_LEVEL_ID }), {
       fill: 0xf5b83c,
       stroke: 0x89501f,
       color: "#3b250f",
       hoverFill: 0xffca55,
     });
-    this.createButton(790, 504, 118, 34, "继续", () => this.showNotice("第二关正在准备中"), {
+    this.createButton(790, 504, 118, 34, "继续", () => this.startNextLevel(), {
       fill: 0x8fb76b,
       stroke: 0x4c7135,
       color: "#183111",
@@ -314,17 +310,22 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   handleLevelClick(level) {
-    if (level.status === "completed") {
-      this.scene.start("GameScene");
+    if (level.status === "completed" || level.status === "next") {
+      this.scene.start("GameScene", { levelId: level.id });
       return;
     }
 
-    if (level.status === "next") {
-      this.showNotice("第二关正在准备中");
+    this.showNotice("需先通关上一关");
+  }
+
+  startNextLevel() {
+    const next = this.levels.find((level) => level.status === "next");
+    if (next) {
+      this.scene.start("GameScene", { levelId: next.id });
       return;
     }
 
-    this.showNotice("先完成前面的关卡");
+    this.showNotice("第一章已全部完成");
   }
 
   showNotice(message) {
