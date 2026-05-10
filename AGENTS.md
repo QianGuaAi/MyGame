@@ -1,44 +1,70 @@
-# Project Instructions
+# 项目说明
 
-## Main Version
+## 主版本
 
-The active game implementation is the Phaser/Vite version under `src/`.
+当前活跃实现是 `src/` 下的 Phaser/Vite 版本。
 
-Godot files under `project.godot`, `scenes/`, `scripts/`, and `docs/GODOT_MIGRATION.md` are migration/reference material. Do not modify them unless the user explicitly asks for Godot work.
+`project.godot`、根目录 `scenes/`、`scripts/`、`docs/GODOT_MIGRATION.md` 是迁移 / 参考资料；除非用户明确要求 Godot 工作，否则不要改动。
 
-## Source Of Truth
+## 唯一权威来源
 
-Use `doc/game-design.md` as the gameplay design source of truth. When gameplay rules change, update that document first or in the same change.
+`doc/game-design.md` 是玩法设计的唯一权威文档。玩法规则变化时必须先更新它，或在同一次提交中一并更新。
 
-## Search Scope
+## 模块地图
 
-Prefer searching only:
+- `src/main.js`：仅 Phaser 启动引导。
+- `src/scenes/GameScene.js`：当前活跃游戏场景。
+- `src/data/`：静态玩法数据。
+- `src/render/`：程序化纹理绘制辅助。
+- `src/utils/`：通用小工具。
+- `doc/`：设计与开发笔记（含 `doc/规划/` 任务说明书）。
+
+## 搜索范围
+
+只在以下范围搜索，避开 `node_modules/`、`dist/`、`.godot/`、生成日志、截图、资源元数据：
 
 ```powershell
 rg "term" src doc AGENTS.md package.json
 ```
 
-Avoid `node_modules/`, `dist/`, `.godot/`, generated logs, screenshots, and imported asset metadata.
+## 开发检查
 
-## Module Map
-
-- `src/main.js`: Phaser bootstrapping only.
-- `src/scenes/GameScene.js`: active gameplay scene.
-- `src/data/`: static gameplay data.
-- `src/render/`: procedural texture drawing helpers.
-- `src/utils/`: small shared helpers.
-- `doc/`: design and development notes.
-
-## Development Checks
-
-Run this after code changes:
+代码改动后必须通过构建：
 
 ```powershell
 npm run build
 ```
 
-Use the local Phaser dev server for manual testing:
+手动测试用本地 Phaser dev server：
 
 ```powershell
 npm run dev -- --port 5173
 ```
+
+---
+
+## 任务说明书生成规则（Task Brief Generator）
+
+**触发条件**：用户说 “不动标：” 或类似表达。
+
+**职责**：不执行该任务本身，而是生成一份结构化的《任务执行说明书》放到 `doc/规划/` 下，供能力较弱的 AI 直接照做。
+
+**说明书必备小节**：
+
+- **【角色定义】** 以 “你是一个专门负责……的助手” 开头。
+- **【任务目标】** 一句话清晰描述最终交付物。
+- **【执行步骤】** 分步编号，每步只做一件事。禁用 “适当 / 合理 / 一些” 等模糊词，全部替换为具体数字或可验证描述。
+- **【输入说明】** 该 AI 将收到的内容：格式、来源、示例。
+- **【输出要求】** 必须包含的元素 + 明确禁止出现的内容。
+- **【边界与限制】** 不能做的事；不确定时处理方式：
+
+  > 如果遇到 X，则执行 Y；无法判断则标注 `[待确认]` 并说明原因。
+
+- **【示例】** 每个关键判断点至少 1 个正例 + 1 个反例。
+- **【自检清单】** 可勾选检查项列表。
+
+**生成流程**：
+
+1. 写完说明书后，**自动扮演** 一个能力较弱的 AI 通读，找出歧义并修改。
+2. 最终只输出说明书本身，**不加前言、解释或元注释**。
+3. Markdown 格式，可直接复制使用。

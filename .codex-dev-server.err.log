@@ -1,10 +1,22 @@
-[2m10:56:25[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
+[2m17:05:40[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
 [39m
-[2m10:56:50[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
+[2m17:08:57[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
 [39m
-[2m11:01:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
+[2m17:09:49[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
 [39m
-[2m11:17:24[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
-[39m
-[2m11:17:57[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Failed to resolve module specifier "phaser". Relative references must start with either "/", "./", or "../".
-[39m
+[2m17:13:17[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:13:17[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m17:17:45[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:17:45[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m17:18:35[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:18:35[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m17:19:27[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:19:27[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m17:26:42[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:26:42[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m17:28:06[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:28:06[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m17:41:48[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m17:41:48[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"
+[2m18:09:14[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-wraith"
+[2m18:09:14[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mFailed to process file: image "boss-warlock"

@@ -18,3 +18,5 @@ Thumbs.db
 crown-outpost-final.png
 
 MyGame/
+.vite
+*.log

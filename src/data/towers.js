@@ -40,6 +40,7 @@ export const TOWER_TYPES = {
     texture: "tower-mage",
     projectile: "orb",
     description: "高伤法术，三级后分支",
+    codexImage: "tower-codex-mage",
     levels: [
       { damage: 25, rate: 1111 },
       { damage: 30, rate: 1000 },
@@ -76,6 +77,15 @@ export const TOWER_TYPES = {
     texture: "tower-barracks",
     projectile: "melee",
     description: "拦截牵制，三级后分支",
+    codexImage: "tower-codex-barracks",
+    soldierMax: 3,
+    soldierProduceMs: 4200,
+    soldierHp: 40,
+    soldierDamage: 6,
+    soldierAttackRate: 950,
+    soldierAttackRange: 22,
+    soldierSpeed: 72,
+    soldierAggroRadius: 96,
     levels: [
       { damage: 5, rate: 500 },
       { damage: 7, rate: 500 },
@@ -107,6 +117,7 @@ export const TOWER_TYPES = {
     texture: "tower-artillery",
     projectile: "bomb",
     description: "范围爆破，三级后分支",
+    codexImage: "tower-codex-mortar",
     levels: [
       { damage: 40, rate: 2500, splash: 58 },
       { damage: 45, rate: 2500, splash: 60 },
@@ -176,6 +187,7 @@ export const TOWER_TYPES = {
     projectile: "flame",
     description: "特殊图纸，燃烧小群，三级后分支",
     blueprintKey: "flame",
+    codexImage: "tower-codex-flame",
     levels: [
       { damage: 25, rate: 1000, burnMs: 3000, burnDps: 5 },
       { damage: 30, rate: 1000, burnMs: 4000, burnDps: 5 },
@@ -201,6 +213,21 @@ export const TOWER_TYPES = {
         description: "燃烧 40伤 1.2攻速",
       },
     },
+  },
+  treasure: {
+    name: "宝箱塔",
+    price: 90,
+    range: 120,
+    damage: 12,
+    rate: 900,
+    projectileSpeed: 380,
+    color: 0xc89030,
+    accent: 0xfff0a8,
+    texture: "tower-artillery",
+    projectile: "bomb",
+    description: "击杀敌人额外掉落金币",
+    blueprintKey: "treasure",
+    codexImage: "tower-codex-treasure",
   },
   altar: {
     name: "祭坛塔",
@@ -244,4 +271,4 @@ export const TOWER_TYPES = {
 };
 
 export const TOWER_BUTTON_ORDER = ["arrow", "mage", "barracks", "artillery", "frost", "flame", "altar"];
-export const SPECIAL_TOWER_KEYS = ["frost", "flame", "altar"];
+export const SPECIAL_TOWER_KEYS = ["frost", "flame", "altar", "treasure"];

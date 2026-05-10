@@ -1,4 +1,4 @@
-﻿import Phaser from "phaser";
+import Phaser from "phaser";
 import { CHAPTERS, getChapterByLevelId } from "../data/chapters.js";
 import { EASTER_EGGS } from "../data/easterEggs.js";
 import { ENEMY_SHEETS, pickWaveMonsterTypes } from "../data/monsters.js";
@@ -6,17 +6,15 @@ import { BASIC_SHOP_ITEMS, EQUIPMENT_CATALOG, RARITY_CONFIG } from "../data/equi
 import { HERO_DEFS } from "../data/heroes.js";
 import { DEFAULT_LEVEL_ID, LEVELS, getLevelCompleteKey, isWildMerchantLevel } from "../data/levels.js";
 import {
-  DECORATIONS,
+  CHAPTER_LAYOUT,
   GAME_HEIGHT,
   GAME_WIDTH,
   PANEL_X,
-  PATH_LENGTH,
-  PATH_POINTS,
-  PATH_SEGMENTS,
   TEXT_STYLE,
   TOTAL_WAVES,
-  TOWER_SLOTS,
-  pointOnPath,
+  buildPathSegments,
+  getChapterPathLength,
+  getChapterPathSegments,
 } from "../data/map.js";
 import { SPECIAL_TOWER_KEYS, TOWER_BUTTON_ORDER, TOWER_TYPES } from "../data/towers.js";
 import { createGameTextures } from "../render/textures.js";
@@ -130,6 +128,16 @@ export class GameScene extends Phaser.Scene {
     this.levelId = data?.levelId ?? DEFAULT_LEVEL_ID;
     this.levelConfig = LEVELS[this.levelId] ?? LEVELS[DEFAULT_LEVEL_ID];
     this.chapter = getChapterByLevelId(this.levelId);
+    this.chapterIndex = data?.chapterIndex ?? Math.max(0, (this.chapter?.id ?? 1) - 1);
+    if (!CHAPTER_LAYOUT[this.chapterIndex]) {
+      this.chapterIndex = 0;
+    }
+    this.layout = CHAPTER_LAYOUT[this.chapterIndex];
+    this.pathPoints = this.layout.pathPoints;
+    this.pathSegments = getChapterPathSegments(this.chapterIndex);
+    this.pathLength = getChapterPathLength(this.chapterIndex);
+    this.spawnLanes = this.buildSpawnLanes(this.layout);
+    this.spawnLaneCursor = 0;
     this.totalWaves = this.levelConfig.waveCount ?? TOTAL_WAVES;
     this.gold = 160;
     this.lives = 20;
@@ -163,14 +171,37 @@ export class GameScene extends Phaser.Scene {
     this.defeatedWaves = 0;
     this.nextSpawnAt = 0;
     this.spawnEvery = 820;
+    this.spawnPlan = [];
+    this.waveStartedAt = 0;
+    this.rallySettingTower = null;
+    this.rallyMarker = null;
+    this.buildMenu = null;
+    this.useSlotBuildMenu = true;
     this.claimedEasterEggs = this.loadClaimedEasterEggs();
     this.createHeroState();
   }
 
   preload() {
+    this.load.on("loaderror", () => {});
     this.loadHeroAssets();
     this.loadChapterMaps();
     this.loadEnemySheets();
+    this.load.image("tower-codex-barracks", "assets/towers/barracks_codex.png");
+    this.load.image("tower-codex-flame", "assets/towers/flame_codex.png");
+    this.load.image("tower-codex-treasure", "assets/towers/treasure_codex.png");
+    this.load.image("tower-codex-mage", "assets/towers/mage_codex.png");
+    this.load.image("tower-codex-mortar", "assets/towers/mortar_codex.png");
+    this.load.image("enemy-codex", "assets/enemies/enemy_codex.png");
+    this.load.image("enemy-elite-codex", "assets/enemies/elite/elite_codex.png");
+    this.load.image("ch1-map", "assets/maps/ch1_map.png");
+    this.load.image("ch2-map", "assets/maps/ch2_map.png");
+    this.load.image("ch3-map", "assets/maps/ch3_map.png");
+    this.load.image("ch4-map", "assets/maps/ch4_map.png");
+    this.load.image("ch5-map", "assets/maps/ch5_map.png");
+    this.load.image("boss-wraith-sheet", "assets/bosses/boss_wraith_sheet.png");
+    this.load.image("boss-warlock-sheet", "assets/bosses/boss_warlock_sheet.png");
+    this.load.image("boss-wraith", "assets/bosses/boss_wraith.png");
+    this.load.image("boss-warlock", "assets/bosses/boss_warlock.png");
   }
 
   loadChapterMaps() {
@@ -199,6 +230,7 @@ export class GameScene extends Phaser.Scene {
     this.createHeroCommandInput();
     this.updateUi();
     this.startPrepPhase(60);
+    this.input.keyboard.on("keydown-D", () => this.enableMapCalibrationMode());
   }
 
   update(time, delta) {
@@ -221,13 +253,68 @@ export class GameScene extends Phaser.Scene {
     this.updateProjectiles(delta);
     this.updateHeroes(time, delta);
     this.updateHeroEffects(delta);
+    this.drawSelectedRallyMarker();
     this.checkWaveComplete();
+  }
+
+  buildSpawnLanes(layout) {
+    const lanePoints = Array.isArray(layout.spawnLanes) && layout.spawnLanes.length > 0
+      ? layout.spawnLanes
+      : [layout.pathPoints];
+
+    return lanePoints.map((points, index) => {
+      const segments = buildPathSegments(points);
+      const length = segments.length > 0 ? segments[segments.length - 1].end : 0;
+      return { id: index, points, segments, length };
+    });
+  }
+
+  getSpawnLane(laneId = 0) {
+    if (!this.spawnLanes || this.spawnLanes.length === 0) {
+      return {
+        id: 0,
+        points: this.pathPoints,
+        segments: this.pathSegments,
+        length: this.pathLength,
+      };
+    }
+    return this.spawnLanes[laneId] ?? this.spawnLanes[0];
+  }
+
+  pointOnSegments(segments, distance) {
+    if (!segments || segments.length === 0) {
+      return { x: 0, y: 0, angle: 0 };
+    }
+    const total = segments[segments.length - 1].end;
+    const clamped = Math.max(0, Math.min(distance, total));
+    const segment = segments.find((item) => clamped <= item.end) || segments[segments.length - 1];
+    const t = segment.length === 0 ? 0 : (clamped - segment.start) / segment.length;
+
+    return {
+      x: segment.from.x + (segment.to.x - segment.from.x) * t,
+      y: segment.from.y + (segment.to.y - segment.from.y) * t,
+      angle: segment.angle,
+    };
+  }
+
+  pointOnSpawnLane(laneId, distance) {
+    const lane = this.getSpawnLane(laneId);
+    return this.pointOnSegments(lane.segments, distance);
+  }
+
+  nextSpawnLaneId() {
+    if (!this.spawnLanes || this.spawnLanes.length <= 1) {
+      return 0;
+    }
+    const laneId = this.spawnLaneCursor % this.spawnLanes.length;
+    this.spawnLaneCursor += 1;
+    return laneId;
   }
 
   createHeroState() {
     this.heroes = HERO_DEFS.map((def, index) => {
       const pathProgress = this.getOutpostHeroProgress(index);
-      const start = pointOnPath(pathProgress);
+      const start = this.pointOnSpawnLane(0, pathProgress);
       const hero = {
         ...def,
         homeX: start.x,
@@ -259,7 +346,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   getOutpostHeroProgress(index) {
-    return Phaser.Math.Clamp(PATH_LENGTH - HERO_OUTPOST_OFFSET - index * HERO_OUTPOST_SPACING, 0, PATH_LENGTH);
+    return Phaser.Math.Clamp(this.pathLength - HERO_OUTPOST_OFFSET - index * HERO_OUTPOST_SPACING, 0, this.pathLength);
   }
 
   createTextures() {
@@ -299,27 +386,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   createMap() {
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x87b866).setOrigin(0);
-
-    const chapterMapKey = this.chapter?.mapKey;
-    if (chapterMapKey && this.textures.exists(chapterMapKey)) {
-      this.add.image(0, 0, chapterMapKey)
-        .setOrigin(0)
-        .setDisplaySize(PANEL_X, GAME_HEIGHT)
-        .setAlpha(0.92);
+    const key = this.layout.backgroundKey;
+    if (this.textures.exists(key)) {
+      const bg = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, key)
+        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
+        .setDepth(0);
+      this.mapBackground = bg;
     } else {
-      this.add.rectangle(0, 0, PANEL_X, GAME_HEIGHT, 0x9bcf73, 0.62).setOrigin(0);
+      this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2c2118).setOrigin(0).setDepth(0);
     }
-    this.add.grid(PANEL_X / 2, GAME_HEIGHT / 2, PANEL_X, GAME_HEIGHT, 48, 48, 0x000000, 0, 0x6a9f4b, 0.1);
-
-    this.drawTerrainPatches();
+    this.mapObstacles = [];
     this.drawBaseAndEntry();
-    this.placeDecorations();
-
-    this.add.rectangle(PANEL_X + 101, GAME_HEIGHT / 2, 202, GAME_HEIGHT, 0xead39a, 1);
-    this.add.rectangle(PANEL_X + 101, GAME_HEIGHT / 2, 184, GAME_HEIGHT - 22, 0xf6e2a9, 1)
-      .setStrokeStyle(4, 0x7a4b25, 1);
-    this.add.rectangle(PANEL_X, GAME_HEIGHT / 2, 4, GAME_HEIGHT, 0x5d3c20, 0.9);
   }
 
   drawTerrainPatches() {
@@ -349,7 +426,7 @@ export class GameScene extends Phaser.Scene {
     this.drawRaggedRoadEdges(graphics, 44);
 
     graphics.lineStyle(4, 0x6f4b2d, 0.28);
-    PATH_SEGMENTS.forEach((segment) => {
+    this.pathSegments.forEach((segment) => {
       const offset = segment.angle === 0 || Math.abs(segment.angle) === Math.PI ? 12 : 0;
       const sideOffset = segment.angle === Math.PI / 2 || segment.angle === -Math.PI / 2 ? 12 : 0;
       graphics.lineBetween(segment.from.x + sideOffset, segment.from.y + offset, segment.to.x + sideOffset, segment.to.y + offset);
@@ -357,7 +434,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     graphics.fillStyle(0x5f4329, 0.24);
-    PATH_SEGMENTS.forEach((segment) => {
+    this.pathSegments.forEach((segment) => {
       const count = Math.max(2, Math.floor(segment.length / 70));
 
       for (let i = 0; i < count; i += 1) {
@@ -369,7 +446,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     graphics.fillStyle(0x6f9d4f, 0.32);
-    PATH_SEGMENTS.forEach((segment) => {
+    this.pathSegments.forEach((segment) => {
       const count = Math.max(2, Math.floor(segment.length / 84));
       const horizontal = Math.abs(segment.to.y - segment.from.y) < 1;
 
@@ -386,7 +463,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   drawRaggedRoadEdges(graphics, width) {
-    PATH_SEGMENTS.forEach((segment, segmentIndex) => {
+    this.pathSegments.forEach((segment, segmentIndex) => {
       const horizontal = Math.abs(segment.to.y - segment.from.y) < 1;
       const count = Math.max(4, Math.floor(segment.length / 30));
 
@@ -415,8 +492,8 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    PATH_POINTS.forEach(([x, y], index) => {
-      if (index === 0 || index === PATH_POINTS.length - 1) {
+    this.pathPoints.forEach(([x, y], index) => {
+      if (index === 0 || index === this.pathPoints.length - 1) {
         return;
       }
 
@@ -428,7 +505,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   drawDirtRoadTexture(width) {
-    PATH_SEGMENTS.forEach((segment) => {
+    this.pathSegments.forEach((segment) => {
       const horizontal = Math.abs(segment.to.y - segment.from.y) < 1;
       const x = (segment.from.x + segment.to.x) / 2;
       const y = (segment.from.y + segment.to.y) / 2;
@@ -438,7 +515,7 @@ export class GameScene extends Phaser.Scene {
         .setDepth(1.5);
     });
 
-    PATH_POINTS.forEach(([x, y]) => {
+    this.pathPoints.forEach(([x, y]) => {
       this.add.tileSprite(x, y, width, width, "dirt-road")
         .setDepth(1.5)
         .setMask(this.createCircleMask(x, y, width / 2));
@@ -455,29 +532,47 @@ export class GameScene extends Phaser.Scene {
   strokePath(graphics, width, color, alpha) {
     graphics.lineStyle(width, color, alpha);
     graphics.beginPath();
-    graphics.moveTo(PATH_POINTS[0][0], PATH_POINTS[0][1]);
-    PATH_POINTS.slice(1).forEach(([x, y]) => graphics.lineTo(x, y));
+    graphics.moveTo(this.pathPoints[0][0], this.pathPoints[0][1]);
+    this.pathPoints.slice(1).forEach(([x, y]) => graphics.lineTo(x, y));
     graphics.strokePath();
     graphics.fillStyle(color, alpha);
-    PATH_POINTS.forEach(([x, y]) => graphics.fillCircle(x, y, width / 2));
+    this.pathPoints.forEach(([x, y]) => graphics.fillCircle(x, y, width / 2));
   }
 
   drawBaseAndEntry() {
-    this.add.circle(736, 324, 28, 0xffcf45, 1)
+    const primaryLane = this.getSpawnLane(0);
+    const endPoint = primaryLane.points[primaryLane.points.length - 1];
+    const starts = (this.spawnLanes ?? [primaryLane]).map((lane) => lane.points[0]);
+    const baseX = endPoint[0] - 22;
+    const baseY = endPoint[1];
+
+    this.add.circle(baseX, baseY, 28, 0xffcf45, 1)
       .setStrokeStyle(5, 0x7a4b25, 0.9)
       .setDepth(4);
-    this.add.circle(736, 324, 18, 0xf7d76e, 0.86)
+    this.add.circle(baseX, baseY, 18, 0xf7d76e, 0.86)
       .setDepth(4.1);
-    this.add.circle(24, 338, 28, 0xffcf45, 1)
-      .setStrokeStyle(5, 0x7a4b25, 0.9)
-      .setDepth(4);
-    this.add.circle(24, 338, 18, 0xf7d76e, 0.86)
-      .setDepth(4.1);
-    this.add.rectangle(740, 324, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1).setDepth(4.2);
-    this.add.rectangle(740, 298, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1).setDepth(4.3);
-    this.add.rectangle(740, 332, 18, 50, 0x4f2f18, 1).setDepth(4.4);
-    this.add.circle(736, 350, 2, 0xf6d37a, 1).setDepth(4.5);
-    this.add.text(710, 272, "前哨", {
+    starts.forEach(([sx, sy]) => {
+      const entryX = Phaser.Math.Clamp(
+        sx < 0 ? sx + 22 : sx > GAME_WIDTH ? sx - 22 : sx,
+        20,
+        GAME_WIDTH - 20,
+      );
+      const entryY = Phaser.Math.Clamp(
+        sy < 0 ? sy + 22 : sy > GAME_HEIGHT ? sy - 22 : sy,
+        20,
+        GAME_HEIGHT - 20,
+      );
+      this.add.circle(entryX, entryY, 24, 0xffcf45, 1)
+        .setStrokeStyle(4, 0x7a4b25, 0.9)
+        .setDepth(4);
+      this.add.circle(entryX, entryY, 15, 0xf7d76e, 0.86)
+        .setDepth(4.1);
+    });
+    this.add.rectangle(baseX + 4, baseY, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1).setDepth(4.2);
+    this.add.rectangle(baseX + 4, baseY - 26, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1).setDepth(4.3);
+    this.add.rectangle(baseX + 4, baseY + 8, 18, 50, 0x4f2f18, 1).setDepth(4.4);
+    this.add.circle(baseX, baseY + 26, 2, 0xf6d37a, 1).setDepth(4.5);
+    this.add.text(baseX - 26, baseY - 52, "前哨", {
       ...TEXT_STYLE,
       fontSize: "16px",
       color: "#4b2c13",
@@ -486,16 +581,6 @@ export class GameScene extends Phaser.Scene {
 
   placeDecorations() {
     this.mapObstacles = [];
-    DECORATIONS.forEach(([texture, x, y, scale, options = {}]) => {
-      this.add.image(x, y, texture).setScale(scale).setDepth(y < 150 ? 1 : 2).setAlpha(0.96);
-      if (options.obstacleRadius) {
-        this.mapObstacles.push({
-          x,
-          y,
-          radius: options.obstacleRadius * scale,
-        });
-      }
-    });
   }
 
   createEasterEggs() {
@@ -583,16 +668,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   createSlots() {
-    this.slots = TOWER_SLOTS.map(([x, y], index) => {
-      const platform = this.add.ellipse(x, y, 54, 36, 0x5a4028, 0.92)
-        .setStrokeStyle(4, 0x2f2415, 0.68)
+    this.slots = this.layout.towerSlots.map(([x, y], index) => {
+      const platform = this.add.ellipse(x, y, 54, 36, 0x5a4028, 0)
+        .setStrokeStyle(4, 0x2f2415, 0)
         .setDepth(5)
         .setInteractive({ useHandCursor: true });
-      const inner = this.add.ellipse(x, y + 1, 38, 22, 0x2d261d, 0.48)
-        .setStrokeStyle(2, 0x9d7a4c, 0.5)
+      const inner = this.add.ellipse(x, y + 1, 38, 22, 0x2d261d, 0)
+        .setStrokeStyle(2, 0x9d7a4c, 0)
         .setDepth(6)
         .setInteractive({ useHandCursor: true });
       const rim = this.add.ellipse(x - 5, y - 7, 34, 9, 0xc7a36d, 0.24)
+        .setFillStyle(0xc7a36d, 0)
         .setDepth(6.1)
         .setInteractive({ useHandCursor: true });
       const slot = { index, x, y, platform, inner, rim, tower: null };
@@ -655,6 +741,17 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  enableMapCalibrationMode() {
+    if (this.calibrationEnabled) return;
+    this.calibrationEnabled = true;
+    this.input.on("pointerdown", (p) => {
+      const x = Math.round(p.worldX);
+      const y = Math.round(p.worldY);
+      console.log(`[map] ch${this.chapterIndex + 1} click: [${x}, ${y}]`);
+    });
+    this.showNotice("已开启地图标定模式：点击空白记录坐标", "#2f4972");
+  }
+
   selectHero(hero) {
     if (this.gameEnded || this.modalOpen) {
       return;
@@ -667,7 +764,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.selectedHero = hero;
+    this.closeBuildMenu();
     this.selectedShopHeroId = hero.id;
+    this.rallySettingTower = null;
     this.selectedTower = null;
     this.clearSelectedRange();
     this.updateHeroSelectionVisuals();
@@ -682,11 +781,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   handleHeroCommandPointer(pointer, gameObjects = []) {
+    if (this.rallySettingTower) {
+      this.rallySettingTower.rallyPoint = { x: Math.round(pointer.worldX), y: Math.round(pointer.worldY) };
+      this.showNotice("集结点已更新", "#315c22");
+      this.rallySettingTower = null;
+      return;
+    }
+    if (this.buildMenu && !gameObjects.some((obj) => obj?.isBuildMenuOption)) {
+      this.closeBuildMenu();
+    }
+
     if (!this.selectedHero || this.gameEnded || this.modalOpen || this.paused) {
       return;
     }
 
-    if (gameObjects.length > 0 || pointer.worldX >= PANEL_X) {
+    if (gameObjects.length > 0) {
       return;
     }
 
@@ -731,7 +840,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   getClosestPointOnPath(x, y) {
-    return PATH_SEGMENTS.reduce((best, segment) => {
+    return this.pathSegments.reduce((best, segment) => {
       const dx = segment.to.x - segment.from.x;
       const dy = segment.to.y - segment.from.y;
       const lengthSq = dx * dx + dy * dy;
@@ -756,7 +865,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   createUi() {
-    this.hudBox = this.add.rectangle(20, 14, 714, 42, 0xf6e2a9, 0.93)
+    this.hudBox = this.add.rectangle(20, 14, GAME_WIDTH - 40, 42, 0xf6e2a9, 0.93)
       .setOrigin(0)
       .setStrokeStyle(3, 0x7a4b25, 0.92)
       .setDepth(30);
@@ -767,18 +876,18 @@ export class GameScene extends Phaser.Scene {
       lineSpacing: 2,
     }).setDepth(31);
 
-    this.noticeText = this.add.text(PANEL_X / 2, 516, "", {
+    this.noticeText = this.add.text(GAME_WIDTH / 2, 516, "", {
       ...TEXT_STYLE,
       fontSize: "18px",
       color: "#6d2e18",
       align: "center",
     }).setOrigin(0.5).setDepth(30).setAlpha(0);
 
-    this.prepBox = this.add.rectangle(PANEL_X / 2, 76, 360, 40, 0xf6e2a9, 0.94)
+    this.prepBox = this.add.rectangle(GAME_WIDTH / 2, 76, 360, 40, 0xf6e2a9, 0.94)
       .setStrokeStyle(2, 0x7a4b25, 0.92)
       .setDepth(30)
       .setVisible(false);
-    this.prepText = this.add.text(PANEL_X / 2, 76, "", {
+    this.prepText = this.add.text(GAME_WIDTH / 2, 76, "", {
       ...TEXT_STYLE,
       fontSize: "14px",
       color: "#4a2d17",
@@ -791,30 +900,30 @@ export class GameScene extends Phaser.Scene {
       ...TEXT_STYLE,
       fontSize: "24px",
       color: "#4a2d17",
-    }).setDepth(30);
+    }).setDepth(30).setVisible(false);
 
-    this.pauseButton = this.createButton(PANEL_X + 178, 30, 54, 26, "", () => this.togglePause(), {
+    this.pauseButton = this.createButton(GAME_WIDTH - 44, 30, 54, 26, "", () => this.togglePause(), {
       fill: 0xe7c980,
       stroke: 0x8a5a26,
       color: "#3a2816",
       hoverFill: 0xf0d894,
     });
 
-    this.startButton = this.createButton(PANEL_X + 101, 70, 154, 34, "", () => this.handleStartButton(), {
+    this.startButton = this.createButton(GAME_WIDTH - 170, 30, 112, 34, "", () => this.handleStartButton(), {
       fill: 0xc64c35,
       stroke: 0x74301f,
       color: "#fff6d8",
       hoverFill: 0xd95f42,
     });
 
-    this.equipmentButton = this.createButton(PANEL_X + 62, 112, 74, 30, "装备", () => this.openEquipmentShop(), {
+    this.equipmentButton = this.createButton(GAME_WIDTH - 340, 30, 74, 30, "装备", () => this.openEquipmentShop(), {
       fill: 0x6f8dbd,
       stroke: 0x2d4978,
       color: "#fff6d8",
       hoverFill: 0x7fa0d2,
     });
 
-    this.inventoryButton = this.createButton(PANEL_X + 140, 112, 74, 30, "背包", () => this.openInventory(), {
+    this.inventoryButton = this.createButton(GAME_WIDTH - 260, 30, 74, 30, "背包", () => this.openInventory(), {
       fill: 0x8fb76b,
       stroke: 0x4c7135,
       color: "#183111",
@@ -825,7 +934,7 @@ export class GameScene extends Phaser.Scene {
       ...TEXT_STYLE,
       fontSize: "15px",
       color: "#70451f",
-    }).setDepth(30);
+    }).setDepth(30).setVisible(false);
 
     this.towerButtons = TOWER_BUTTON_ORDER.map((key, index) => {
       const tower = TOWER_TYPES[key];
@@ -841,6 +950,25 @@ export class GameScene extends Phaser.Scene {
         .setDepth(32);
 
       return { key, button, icon };
+    });
+
+    this.codexButton = this.createButton(GAME_WIDTH - 340, 68, 74, 24, "塔图鉴", () => this.openTowerCodexList(), {
+      fill: 0x9bc06a,
+      hoverFill: 0xb1d585,
+      stroke: 0x3e6a26,
+      color: "#1f3013",
+    });
+    this.enemyCodexButton = this.createButton(GAME_WIDTH - 260, 68, 74, 24, "敌人图鉴", () => this.openEnemyCodex(), {
+      fill: 0xc9756d,
+      hoverFill: 0xdd8d85,
+      stroke: 0x5c2a25,
+      color: "#fff6d8",
+    });
+    this.bossCodexButton = this.createButton(GAME_WIDTH - 130, 68, 116, 24, "Boss 图鉴", () => this.openBossCodex(), {
+      fill: 0x6c4ea3,
+      hoverFill: 0x8865c0,
+      stroke: 0x2f1f4d,
+      color: "#fff6d8",
     });
 
     this.selectionText = this.add.text(PANEL_X + 25, 402, "", {
@@ -864,6 +992,21 @@ export class GameScene extends Phaser.Scene {
       color: "#183111",
       hoverFill: 0xa0c77e,
     });
+    this.rallyButton = this.createButton(PANEL_X + 101, 436, 154, 24, "设置集结点", () => this.startRallySetting(), {
+      fill: 0x6f8dbd,
+      stroke: 0x2d4978,
+      color: "#fff6d8",
+      hoverFill: 0x7fa0d2,
+    });
+    this.rallyButton.setVisible(false);
+    this.selectionText.setVisible(false);
+    this.upgradeButton.setVisible(false);
+    this.sellButton.setVisible(false);
+    this.towerButtons.forEach(({ button, icon }) => {
+      button.setVisible(false);
+      button.disableInteractive();
+      icon.setVisible(false);
+    });
 
     this.endOverlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x20150d, 0.62)
       .setDepth(80)
@@ -882,6 +1025,119 @@ export class GameScene extends Phaser.Scene {
       hoverFill: 0xffca55,
     });
     this.restartButton.setDepth(82).setVisible(false);
+  }
+
+  openTowerCodexList() {
+    this.createModalBase("塔图鉴", "选择一座塔查看完整设定图。");
+    const order = ["barracks", "flame", "treasure", "mage", "artillery"];
+    order.forEach((key, index) => {
+      const type = TOWER_TYPES[key];
+      if (!type) {
+        return;
+      }
+
+      const col = index % 3;
+      const row = Math.floor(index / 3);
+      const x = 240 + col * 170;
+      const y = 210 + row * 64;
+      const button = this.createButton(x, y, 150, 40, type.name, () => {
+        this.closeModal();
+        this.openTowerCodex(key);
+      }, {
+        fill: 0xe7c980,
+        hoverFill: 0xf0d894,
+        stroke: 0x8a5a26,
+        color: "#3a2816",
+      });
+      button.setDepth(93);
+      this.modalObjects.push(button);
+    });
+    this.addModalCloseButton("关闭", () => this.closeModal());
+  }
+
+  openTowerCodex(typeKey) {
+    const type = TOWER_TYPES[typeKey];
+    if (!type || !type.codexImage || !this.textures.exists(type.codexImage)) {
+      this.showNotice(`暂无 ${type?.name ?? typeKey} 图鉴`, "#7a4b25");
+      return;
+    }
+
+    this.createModalBase(`${type.name} · 图鉴`, "点击关闭返回。");
+    const image = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 16, type.codexImage).setDepth(91);
+    const maxWidth = GAME_WIDTH - 80;
+    const maxHeight = GAME_HEIGHT - 140;
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+    image.setScale(scale);
+    this.modalObjects.push(image);
+    this.addModalCloseButton("关闭", () => this.closeModal());
+  }
+
+  openEnemyCodex() {
+    this.createModalBase("敌人图鉴", "选择一类查看完整设定图。");
+    const normalButton = this.createButton(280, 200, 200, 44, "普通小怪", () => {
+      this.closeModal();
+      this.showCodexImage("enemy-codex", "敌人图鉴 · 普通小怪");
+    }, {
+      fill: 0xc9756d,
+      hoverFill: 0xdd8d85,
+      stroke: 0x5c2a25,
+      color: "#fff6d8",
+    }).setDepth(93);
+    const eliteButton = this.createButton(280, 260, 200, 44, "精英小怪", () => {
+      this.closeModal();
+      this.showCodexImage("enemy-elite-codex", "敌人图鉴 · 精英小怪");
+    }, {
+      fill: 0x9c5cc4,
+      hoverFill: 0xb074d8,
+      stroke: 0x4a285c,
+      color: "#fff6d8",
+    }).setDepth(93);
+    this.modalObjects.push(normalButton, eliteButton);
+    this.addModalCloseButton("关闭", () => this.closeModal());
+  }
+
+  showCodexImage(textureKey, title) {
+    if (!this.textures.exists(textureKey)) {
+      this.showNotice(`暂无图鉴：${title}`, "#7a4b25");
+      return;
+    }
+    this.createModalBase(title, "点击关闭返回。");
+    const image = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 16, textureKey).setDepth(91);
+    const maxWidth = GAME_WIDTH - 80;
+    const maxHeight = GAME_HEIGHT - 140;
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+    image.setScale(scale);
+    this.modalObjects.push(image);
+    this.addModalCloseButton("关闭", () => this.closeModal());
+  }
+
+  openBossCodex(selectedKey = "boss-wraith-sheet") {
+    const entries = [
+      { key: "boss-wraith-sheet", label: "奥术幽灵" },
+      { key: "boss-warlock-sheet", label: "暗月术士" },
+    ].filter((item) => this.textures.exists(item.key));
+    if (entries.length === 0) {
+      this.showNotice("暂无 Boss 图鉴", "#7a4b25");
+      return;
+    }
+    const activeKey = entries.some((item) => item.key === selectedKey) ? selectedKey : entries[0].key;
+    this.createModalBase("Boss 图鉴", "选择 Boss 查看整图。");
+    entries.forEach((item, index) => {
+      const button = this.createButton(250 + index * 190, 170, 170, 36, item.label, () => this.openBossCodex(item.key), {
+        fill: item.key === activeKey ? 0x7f62ba : 0x6c4ea3,
+        hoverFill: 0x9475cf,
+        stroke: 0x2f1f4d,
+        color: "#fff6d8",
+      }).setDepth(93);
+      this.modalObjects.push(button);
+    });
+    const image = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 50, activeKey).setDepth(91);
+    const maxWidth = GAME_WIDTH - 120;
+    const maxHeight = GAME_HEIGHT - 250;
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height, 1);
+    image.setScale(scale);
+    this.modalObjects.push(image);
+    this.addModalCloseButton("关闭", () => this.closeModal());
   }
 
   createHeroPortraits() {
@@ -1011,11 +1267,81 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (slot.tower) {
+      this.closeBuildMenu();
       this.selectTower(slot.tower);
       return;
     }
 
-    this.buildTower(slot, this.getPendingBuildType());
+    if (this.buildMenu?.slot === slot) {
+      this.closeBuildMenu();
+      return;
+    }
+    this.openBuildMenu(slot);
+  }
+
+  getBuildableTowerKeys() {
+    return TOWER_BUTTON_ORDER.filter((key) => this.isTowerUnlocked(key) && TOWER_TYPES[key]);
+  }
+
+  openBuildMenu(slot) {
+    this.closeBuildMenu();
+    const keys = this.getBuildableTowerKeys();
+    if (keys.length === 0) {
+      this.showNotice("暂无可建塔（需要图纸）", "#9c2b24");
+      return;
+    }
+    const objects = [];
+    const radius = keys.length <= 4 ? 56 : 72;
+    const startAngle = -Math.PI / 2;
+    const step = (Math.PI * 2) / keys.length;
+    const hub = this.add.circle(slot.x, slot.y, 16, 0x2f2415, 0.56)
+      .setStrokeStyle(2, 0xfff1bb, 0.85)
+      .setDepth(41);
+    const ring = this.add.circle(slot.x, slot.y, radius + 34, 0xffffff, 0)
+      .setStrokeStyle(1, 0xfff1bb, 0.4)
+      .setDepth(40);
+    objects.push(hub, ring);
+
+    keys.forEach((key, index) => {
+      const tower = TOWER_TYPES[key];
+      const angle = startAngle + step * index;
+      const x = slot.x + Math.cos(angle) * radius;
+      const y = slot.y + Math.sin(angle) * radius;
+      const bg = this.add.circle(0, 0, 25, 0xf6e2a9, 0.96)
+        .setStrokeStyle(3, tower.color, 0.95);
+      const icon = this.add.image(0, -4, this.getTowerTextureKey(key, 1, null, "base"))
+        .setDisplaySize(28, 28);
+      const priceBg = this.add.rectangle(0, 17, 36, 12, 0x2f2415, 0.95)
+        .setStrokeStyle(1, 0x8a5a26, 0.9);
+      const canAfford = this.gold >= tower.price;
+      const price = this.add.text(0, 17, String(tower.price), {
+        fontFamily: "Inter, system-ui, sans-serif",
+        fontSize: "10px",
+        color: canAfford ? "#fff6d8" : "#f2a1a1",
+      }).setOrigin(0.5);
+      const option = this.add.container(x, y, [bg, icon, priceBg, price])
+        .setDepth(42)
+        .setSize(52, 52)
+        .setInteractive(new Phaser.Geom.Circle(0, 0, 25), Phaser.Geom.Circle.Contains);
+      option.isBuildMenuOption = true;
+      option.on("pointerover", () => option.setScale(1.08));
+      option.on("pointerout", () => option.setScale(1));
+      option.on("pointerdown", (_pointer, _localX, _localY, event) => {
+        event?.stopPropagation();
+        this.buildTower(slot, key);
+      });
+      objects.push(option);
+    });
+
+    this.buildMenu = { slot, objects };
+  }
+
+  closeBuildMenu() {
+    if (!this.buildMenu) {
+      return;
+    }
+    this.buildMenu.objects.forEach((object) => object.destroy());
+    this.buildMenu = null;
   }
 
   getPendingBuildType() {
@@ -1087,13 +1413,16 @@ export class GameScene extends Phaser.Scene {
     };
 
     if (safeTypeKey === "barracks") {
-      tower.guards = this.createTowerGuards(tower);
+      tower.rallyPoint = { x: tower.x, y: tower.y + 24 };
+      tower.soldiers = [];
+      tower.nextSoldierAt = 0;
     }
 
+    this.closeBuildMenu();
     slot.tower = tower;
-    slot.platform.setAlpha(0.42);
-    slot.inner.setAlpha(0.16);
-    slot.rim.setAlpha(0.12);
+    slot.platform.setAlpha(0);
+    slot.inner.setAlpha(0);
+    slot.rim.setAlpha(0);
     sprite.on("pointerdown", () => this.selectTower(tower));
     this.towers.push(tower);
     this.selectTower(tower);
@@ -1190,7 +1519,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   selectTower(tower) {
+    this.closeBuildMenu();
     this.selectedTower = tower;
+    this.rallySettingTower = null;
     this.selectedHero = null;
     this.updateHeroSelectionVisuals();
     this.clearSelectedRange();
@@ -1200,9 +1531,30 @@ export class GameScene extends Phaser.Scene {
     this.updateUi();
   }
 
+  startRallySetting() {
+    const tower = this.selectedTower;
+    if (!tower || tower.typeKey !== "barracks") {
+      return;
+    }
+    this.rallySettingTower = tower;
+    this.showNotice("点击地图设置集结点", "#2f4972");
+  }
+
   clearSelectedRange() {
     this.selectedRange?.destroy();
     this.selectedRange = null;
+  }
+
+  drawSelectedRallyMarker() {
+    this.rallyMarker?.destroy();
+    this.rallyMarker = null;
+    const tower = this.selectedTower;
+    if (!tower || tower.typeKey !== "barracks" || !tower.rallyPoint) {
+      return;
+    }
+    this.rallyMarker = this.add.circle(tower.rallyPoint.x, tower.rallyPoint.y, 5, 0x8bd4ff, 0.85)
+      .setStrokeStyle(2, 0x2f4972, 0.95)
+      .setDepth(22);
   }
 
   previewBuildRange(slot) {
@@ -1220,7 +1572,7 @@ export class GameScene extends Phaser.Scene {
 
   clearHoverRange(slot) {
     if (!slot.tower) {
-      slot.platform.setStrokeStyle(4, 0x2f2415, 0.68);
+      slot.platform.setStrokeStyle(4, 0x2f2415, 0);
     }
 
     this.hoverRange?.destroy();
@@ -1290,10 +1642,32 @@ export class GameScene extends Phaser.Scene {
     this.spawnedThisWave = 0;
     this.enemiesThisWave = this.getWaveEnemyTotal(this.wave);
     this.spawnEvery = Math.max(410, 860 - this.wave * 32);
-    this.nextSpawnAt = this.time.now + 450;
+    this.spawnPlan = this.buildSpawnPlan();
+    this.waveStartedAt = this.time.now;
     this.waveMonsterPool = this.buildWaveMonsterPool(this.wave);
     this.showNotice(`第 ${this.wave}/${this.totalWaves} 波来袭`, "#7a3d12");
     this.updateUi();
+  }
+
+  buildSpawnPlan() {
+    const total = this.enemiesThisWave;
+    const plan = [];
+    let elapsed = 0;
+    let clusterSize = 1;
+    let remaining = total;
+    const intraGap = 280;
+    const interGap = 1700;
+    const maxCluster = 5;
+    while (remaining > 0) {
+      const size = Math.min(clusterSize, remaining);
+      for (let i = 0; i < size; i += 1) {
+        plan.push(elapsed + i * intraGap);
+      }
+      elapsed = plan[plan.length - 1] + interGap;
+      clusterSize = Math.min(clusterSize + 1, maxCluster);
+      remaining -= size;
+    }
+    return plan;
   }
 
   buildWaveMonsterPool(wave) {
@@ -1350,18 +1724,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateSpawning(time) {
-    if (!this.waveActive || this.spawnedThisWave >= this.enemiesThisWave || time < this.nextSpawnAt) {
+    if (!this.waveActive || this.spawnedThisWave >= this.enemiesThisWave) {
       return;
     }
-
-    const rank = this.getSpawnRank();
+    const dueAt = this.waveStartedAt + this.spawnPlan[this.spawnedThisWave];
+    if (time < dueAt) {
+      return;
+    }
+    const rank = this.getCurrentRank(this.spawnedThisWave + 1, this.enemiesThisWave);
     this.spawnEnemy(rank);
     this.spawnedThisWave += 1;
-    this.nextSpawnAt = time + this.spawnEvery;
   }
 
-  getSpawnRank() {
-    const isLast = this.spawnedThisWave === this.enemiesThisWave - 1;
+  getCurrentRank(spawnIndex, totalEnemies) {
+    const isLast = spawnIndex === totalEnemies;
 
     if ((this.levelConfig.enemyMix === "boss" || this.wave === this.totalWaves) && this.wave === this.totalWaves && isLast) {
       return "boss";
@@ -1379,7 +1755,7 @@ export class GameScene extends Phaser.Scene {
       return "rare";
     }
 
-    if (this.wave >= 2 && (this.spawnedThisWave % 6 === 5 || isLast)) {
+    if (this.wave >= 2 && ((spawnIndex - 1) % 6 === 5 || isLast)) {
       return "heavy";
     }
 
@@ -1387,6 +1763,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   spawnEnemy(rank) {
+    const layout = this.layout;
+    let bossKey = "enemy-golem-walk";
+    if (rank === "boss" && layout.bossTexture && this.textures.exists(layout.bossTexture)) {
+      bossKey = layout.bossTexture;
+    }
     const waveScale = this.wave - 1;
     const rankStats = {
       normal: { hp: 50, hpGrowth: 23, reward: 8, rewardGrowth: 1.5, speed: 62, texture: "enemy-scout", tint: 0xffffff, scale: 1, damage: 7 },
@@ -1401,11 +1782,16 @@ export class GameScene extends Phaser.Scene {
     const tierScale = monster ? 1 + (monster.tier - 1) * 0.06 : 1;
     const maxHp = Math.round((stats.hp + waveScale * stats.hpGrowth) * hpMultiplier * tierScale);
     const reward = Math.round((stats.reward + this.wave * stats.rewardGrowth) * (monster ? 1 + (monster.tier - 1) * 0.05 : 1));
-    const point = pointOnPath(0);
-    const useSheet = monster && this.textures.exists(monster.sheetKey) && this.textures.get(monster.sheetKey).has(monster.frameKey);
-    const textureKey = useSheet ? monster.sheetKey : stats.texture;
+    const laneId = this.nextSpawnLaneId();
+    const lane = this.getSpawnLane(laneId);
+    const point = this.pointOnSpawnLane(laneId, 0);
+    const useBossStatic = rank === "boss" && this.textures.exists(bossKey) && !bossKey.startsWith("enemy-");
+    const useSheet = !useBossStatic && monster && this.textures.exists(monster.sheetKey) && this.textures.get(monster.sheetKey).has(monster.frameKey);
+    const textureKey = useBossStatic ? bossKey : (useSheet ? monster.sheetKey : stats.texture);
     const frameKey = useSheet ? monster.frameKey : undefined;
-    const sprite = this.add.sprite(point.x, point.y, textureKey, frameKey)
+    const sprite = (useBossStatic
+      ? this.add.image(point.x, point.y, textureKey)
+      : this.add.sprite(point.x, point.y, textureKey, frameKey))
       .setRotation(useSheet ? 0 : point.angle)
       .setDepth(18);
     if (useSheet) {
@@ -1431,6 +1817,8 @@ export class GameScene extends Phaser.Scene {
       hp: maxHp,
       reward,
       progress: 0,
+      laneId,
+      pathLength: lane.length,
       speed: (stats.speed + (rank === "normal" || rank === "rare" ? Math.min(28, this.wave * 3) : Math.min(18, this.wave * 2)))
         * (this.levelConfig.enemyMix === "tougher" ? 0.96 : 1),
       alive: true,
@@ -1444,6 +1832,8 @@ export class GameScene extends Phaser.Scene {
       burnDps: 0,
       baseTint: useSheet ? 0xffffff : stats.tint,
       usesSheet: useSheet,
+      lockedTarget: null,
+      savedProgress: 0,
       barWidth,
     };
 
@@ -1452,6 +1842,7 @@ export class GameScene extends Phaser.Scene {
 
   updateEnemies(time, delta) {
     const dt = delta / 1000;
+    const aggroRadius = TOWER_TYPES.barracks.soldierAggroRadius;
 
     [...this.enemies].forEach((enemy) => {
       if (!enemy.alive) {
@@ -1470,24 +1861,79 @@ export class GameScene extends Phaser.Scene {
         enemy.slowFactor = 1;
       }
 
+      if (enemy.lockedTarget) {
+        const target = enemy.lockedTarget;
+        const targetX = typeof target.x === "number" ? target.x : target.sprite?.x;
+        const targetY = typeof target.y === "number" ? target.y : target.sprite?.y;
+        const targetAlive = target.alive !== false && !target.dead && (typeof target.hp !== "number" || target.hp > 0);
+        const distance = (typeof targetX === "number" && typeof targetY === "number")
+          ? Phaser.Math.Distance.Between(enemy.sprite.x, enemy.sprite.y, targetX, targetY)
+          : Infinity;
+        if (!targetAlive || distance > aggroRadius * 1.5) {
+          this.clearEnemyLock(enemy);
+        }
+      }
+
+      if (!enemy.lockedTarget) {
+        const candidates = this.collectAggroCandidates();
+        let best = null;
+        let bestDistance = Infinity;
+        candidates.forEach((candidate) => {
+          if (candidate.attackers.size >= 5) {
+            return;
+          }
+          const distance = Phaser.Math.Distance.Between(enemy.sprite.x, enemy.sprite.y, candidate.x, candidate.y);
+          if (distance <= aggroRadius && distance < bestDistance) {
+            bestDistance = distance;
+            best = candidate;
+          }
+        });
+        if (best && best.attackers.size < 5) {
+          enemy.savedProgress = enemy.progress;
+          enemy.lockedTarget = best.ref;
+          best.attackers.add(enemy);
+        }
+      }
+
       const slowed = time < enemy.slowUntil;
       const burning = time < enemy.burnUntil;
       const speed = enemy.speed * (slowed ? enemy.slowFactor : 1);
-      enemy.progress += speed * dt;
+      if (enemy.lockedTarget) {
+        const target = enemy.lockedTarget;
+        const targetX = typeof target.x === "number" ? target.x : target.sprite?.x;
+        const targetY = typeof target.y === "number" ? target.y : target.sprite?.y;
+        if (typeof targetX !== "number" || typeof targetY !== "number") {
+          this.clearEnemyLock(enemy);
+        } else {
+          const distance = Phaser.Math.Distance.Between(enemy.sprite.x, enemy.sprite.y, targetX, targetY);
+          const attackRange = 18;
+          if (distance > attackRange) {
+            const step = Math.min(distance, speed * dt);
+            enemy.sprite.x += ((targetX - enemy.sprite.x) / distance) * step;
+            enemy.sprite.y += ((targetY - enemy.sprite.y) / distance) * step;
+          }
+          if (!enemy.usesSheet) {
+            enemy.sprite.setRotation(Phaser.Math.Angle.Between(enemy.sprite.x, enemy.sprite.y, targetX, targetY));
+          }
+        }
+      } else {
+        enemy.progress += speed * dt;
 
-      if (enemy.progress >= PATH_LENGTH) {
-        this.enemyEscaped(enemy);
-        return;
+        if (enemy.progress >= (enemy.pathLength ?? this.pathLength)) {
+          this.enemyEscaped(enemy);
+          return;
+        }
+
+        const point = this.pointOnSpawnLane(enemy.laneId ?? 0, enemy.progress);
+        enemy.sprite.setPosition(point.x, point.y);
+        if (!enemy.usesSheet) {
+          enemy.sprite.setRotation(point.angle);
+        }
       }
 
-      const point = pointOnPath(enemy.progress);
-      enemy.sprite.setPosition(point.x, point.y);
-      if (!enemy.usesSheet) {
-        enemy.sprite.setRotation(point.angle);
-      }
       enemy.sprite.setTint(slowed ? 0xb8d9ff : burning ? 0xff9b55 : enemy.baseTint);
-      enemy.barBack.setPosition(point.x - enemy.barWidth / 2, point.y - 28);
-      enemy.barFill.setPosition(point.x - enemy.barWidth / 2, point.y - 28);
+      enemy.barBack.setPosition(enemy.sprite.x - enemy.barWidth / 2, enemy.sprite.y - 28);
+      enemy.barFill.setPosition(enemy.sprite.x - enemy.barWidth / 2, enemy.sprite.y - 28);
       enemy.barFill.setDisplaySize(enemy.barWidth * Phaser.Math.Clamp(enemy.hp / enemy.maxHp, 0, 1), 5);
     });
   }
@@ -1549,28 +1995,135 @@ export class GameScene extends Phaser.Scene {
     tower.nextFireAt = time + 1800;
   }
 
-  updateBarracksTower(tower, target, time) {
-    tower.guards.forEach((guard, index) => {
-      const goalX = target ? target.sprite.x - 18 + index * 36 : guard.homeX;
-      const goalY = target ? target.sprite.y + 18 : guard.homeY;
+  updateBarracksTower(tower, _target, time) {
+    const def = TOWER_TYPES.barracks;
+    tower.soldiers = (tower.soldiers ?? []).filter((soldier) => soldier.alive);
+    if (tower.soldiers.length < def.soldierMax && time >= (tower.nextSoldierAt ?? 0)) {
+      const soldier = this.spawnSoldier(tower);
+      tower.soldiers.push(soldier);
+      tower.nextSoldierAt = time + def.soldierProduceMs;
+    }
+    tower.soldiers.forEach((soldier) => this.updateSoldier(soldier, time));
+  }
 
-      guard.sprite.x = Phaser.Math.Linear(guard.sprite.x, goalX, 0.16);
-      guard.sprite.y = Phaser.Math.Linear(guard.sprite.y, goalY, 0.16);
-      guard.sprite.setFlipX(target ? guard.sprite.x > target.sprite.x : false);
-    });
+  spawnSoldier(tower) {
+    const def = TOWER_TYPES.barracks;
+    const textureKey = this.textures.exists("guard") ? "guard" : "enemy-scout";
+    const sprite = this.add.image(tower.x, tower.y, textureKey)
+      .setScale(textureKey === "guard" ? 0.82 : 0.78)
+      .setDepth(20);
+    return {
+      sprite,
+      ownerTower: tower,
+      x: tower.x,
+      y: tower.y,
+      hp: def.soldierHp,
+      maxHp: def.soldierHp,
+      damage: def.soldierDamage,
+      attackRate: def.soldierAttackRate,
+      attackRange: def.soldierAttackRange,
+      speed: def.soldierSpeed,
+      nextAttackAt: 0,
+      alive: true,
+      attackers: new Set(),
+    };
+  }
 
-    if (!target || time < tower.nextFireAt) {
+  updateSoldier(soldier, time) {
+    if (!soldier.alive) {
       return;
     }
-
-    target.slowUntil = Math.max(target.slowUntil, time + tower.slowMs);
-    target.slowFactor = Math.min(target.slowFactor, tower.slowFactor);
-    this.damageEnemy(target, Math.round(tower.damage * this.getTowerDamageMultiplier(tower)), {
-      slowMs: tower.slowMs,
-      slowFactor: tower.slowFactor,
+    soldier.attackers.forEach((enemy) => {
+      if (!enemy.alive || enemy.lockedTarget !== soldier) {
+        soldier.attackers.delete(enemy);
+      }
     });
-    this.playBarracksAttackAction(tower, target);
-    tower.nextFireAt = time + tower.rate * this.getTowerRateMultiplier(tower);
+    const rally = soldier.ownerTower.rallyPoint;
+    let target = null;
+    let bestDistance = Infinity;
+    soldier.attackers.forEach((enemy) => {
+      if (!enemy.alive) {
+        return;
+      }
+      const distance = Phaser.Math.Distance.Between(soldier.x, soldier.y, enemy.sprite.x, enemy.sprite.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        target = enemy;
+      }
+    });
+    if (target) {
+      if (bestDistance > soldier.attackRange) {
+        this.moveTowards(soldier, target.sprite.x, target.sprite.y, soldier.speed);
+      } else if (time >= soldier.nextAttackAt) {
+        this.damageEnemy(target, soldier.damage, {});
+        soldier.nextAttackAt = time + soldier.attackRate;
+      }
+    } else {
+      const distanceToRally = Phaser.Math.Distance.Between(soldier.x, soldier.y, rally.x, rally.y);
+      if (distanceToRally > 4) {
+        this.moveTowards(soldier, rally.x, rally.y, soldier.speed);
+      }
+    }
+    if (target) {
+      soldier.sprite.setFlipX(target.sprite.x < soldier.x);
+    }
+    soldier.sprite.x = soldier.x;
+    soldier.sprite.y = soldier.y;
+  }
+
+  moveTowards(obj, targetX, targetY, speed) {
+    const dt = this.game.loop.delta / 1000;
+    const dx = targetX - obj.x;
+    const dy = targetY - obj.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const step = Math.min(distance, speed * dt);
+    obj.x += (dx / distance) * step;
+    obj.y += (dy / distance) * step;
+  }
+
+  destroySoldier(soldier) {
+    if (!soldier || !soldier.alive) {
+      return;
+    }
+    soldier.alive = false;
+    soldier.attackers?.forEach((enemy) => {
+      if (enemy.lockedTarget === soldier) {
+        enemy.lockedTarget = null;
+      }
+    });
+    soldier.attackers?.clear();
+    soldier.sprite?.destroy();
+  }
+
+  clearEnemyLock(enemy) {
+    enemy.lockedTarget?.attackers?.delete(enemy);
+    if (typeof enemy.savedProgress === "number") {
+      enemy.progress = Math.max(enemy.progress, enemy.savedProgress);
+    }
+    enemy.lockedTarget = null;
+  }
+
+  collectAggroCandidates() {
+    const list = [];
+    this.towers.forEach((tower) => {
+      if (tower.typeKey !== "barracks") {
+        return;
+      }
+      (tower.soldiers ?? []).forEach((soldier) => {
+        if (soldier.alive) {
+          list.push({ x: soldier.x, y: soldier.y, ref: soldier, attackers: soldier.attackers });
+        }
+      });
+    });
+    this.heroes.forEach((hero) => {
+      if (hero.hp > 0 && !hero.dead) {
+        if (!hero.attackers) {
+          hero.attackers = new Set();
+        }
+        list.push({ x: hero.x, y: hero.y, ref: hero, attackers: hero.attackers });
+      }
+    });
+    return list;
   }
 
   findTargetForTower(tower) {
@@ -1840,6 +2393,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    this.clearEnemyLock(enemy);
     enemy.alive = false;
     this.enemies = this.enemies.filter((item) => item !== enemy);
     enemy.sprite.destroy();
@@ -2019,14 +2573,18 @@ export class GameScene extends Phaser.Scene {
 
     const refund = Math.floor(tower.totalCost * 0.55);
     tower.slot.tower = null;
-    tower.slot.platform.setAlpha(1);
-    tower.slot.inner.setAlpha(1);
-    tower.slot.rim.setAlpha(1);
+    tower.slot.platform.setAlpha(0);
+    tower.slot.inner.setAlpha(0);
+    tower.slot.rim.setAlpha(0);
     tower.shadow.destroy();
     tower.sprite.destroy();
     tower.levelText.destroy();
-    tower.guards.forEach((guard) => guard.sprite.destroy());
+    tower.soldiers?.forEach((soldier) => this.destroySoldier(soldier));
+    tower.guards?.forEach((guard) => guard.sprite.destroy());
     this.towers = this.towers.filter((item) => item !== tower);
+    if (this.rallySettingTower === tower) {
+      this.rallySettingTower = null;
+    }
     this.selectedTower = null;
     this.clearSelectedRange();
     this.gold += refund;
@@ -2274,7 +2832,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   isHeroPointWalkable(x, y) {
-    if (x < HERO_COLLISION_RADIUS || x > PANEL_X - HERO_COLLISION_RADIUS) {
+    if (x < HERO_COLLISION_RADIUS || x > GAME_WIDTH - HERO_COLLISION_RADIUS) {
       return false;
     }
 
@@ -2366,16 +2924,37 @@ export class GameScene extends Phaser.Scene {
         return;
       }
 
-      const target = this.heroes
-        .filter((hero) => !hero.dead && Phaser.Math.Distance.Between(hero.x, hero.y, enemy.sprite.x, enemy.sprite.y) <= 48)
-        .sort((a, b) => Phaser.Math.Distance.Between(a.x, a.y, enemy.sprite.x, enemy.sprite.y)
-          - Phaser.Math.Distance.Between(b.x, b.y, enemy.sprite.x, enemy.sprite.y))[0];
-
+      const target = enemy.lockedTarget;
       if (!target) {
         return;
       }
 
-      this.damageHero(target, enemy.attackDamage, enemy);
+      const targetX = typeof target.x === "number" ? target.x : target.sprite?.x;
+      const targetY = typeof target.y === "number" ? target.y : target.sprite?.y;
+      if (typeof targetX !== "number" || typeof targetY !== "number") {
+        this.clearEnemyLock(enemy);
+        return;
+      }
+      if (Phaser.Math.Distance.Between(targetX, targetY, enemy.sprite.x, enemy.sprite.y) > 18) {
+        return;
+      }
+      if ("dead" in target) {
+        if (target.dead || target.hp <= 0) {
+          this.clearEnemyLock(enemy);
+          return;
+        }
+        this.damageHero(target, enemy.attackDamage, enemy);
+      } else {
+        if (!target.alive || target.hp <= 0) {
+          this.clearEnemyLock(enemy);
+          return;
+        }
+        target.hp -= enemy.attackDamage;
+        this.addFloatingText(target.x, target.y - 26, `-${enemy.attackDamage}`, "#9c2b24");
+        if (target.hp <= 0) {
+          this.destroySoldier(target);
+        }
+      }
       enemy.nextAttackAt = time + (enemy.rank === "boss" ? 760 : 1120);
     });
   }
@@ -2408,6 +2987,12 @@ export class GameScene extends Phaser.Scene {
       hero.blockStreak = 0;
       hero.defeatedAt = this.time.now;
       hero.respawnAt = this.time.now + HERO_RESPAWN_MS;
+      hero.attackers?.forEach((enemy) => {
+        if (enemy.lockedTarget === hero) {
+          enemy.lockedTarget = null;
+        }
+      });
+      hero.attackers?.clear();
       hero.group.setAlpha(0.42);
       if (this.selectedHero === hero) {
         this.selectedHero = null;
@@ -2472,8 +3057,7 @@ export class GameScene extends Phaser.Scene {
         ? hero.actionState
         : moving
           ? this.getHeroMovementState(hero)
-          : "walk";
-    const phase = time * 0.012 + (hero.id === "ergou" ? 1.2 : hero.id === "yueguang" ? 2.4 : 0);
+          : "idle";
 
     this.setHeroActionFrame(hero, state, time);
     hero.sprite.setFlipX((hero.moveDirection ?? 1) < 0);
@@ -2484,11 +3068,11 @@ export class GameScene extends Phaser.Scene {
     hero.shadow?.setScale(1, 1);
     hero.sprite.setX(0);
 
-    if (state === "walk" || state === "run") {
-      hero.sprite.setAngle(Math.sin(phase) * 5);
-      hero.sprite.setY(-8 + Math.abs(Math.sin(phase)) * -3);
-      this.setHeroSpritePoseScale(hero, 1 + Math.sin(phase) * 0.025, 1 - Math.sin(phase) * 0.02);
-      hero.shadow?.setScale(1.05 - Math.abs(Math.sin(phase)) * 0.12, 1);
+    if (state === "idle" || state === "walk" || state === "run") {
+      hero.sprite.setAngle(0);
+      hero.sprite.setY(-8);
+      this.setHeroSpritePoseScale(hero, 1, 1);
+      hero.shadow?.setScale(1, 1);
       return;
     }
 
@@ -2544,7 +3128,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    hero.sprite.setY(-8 + Math.sin(phase * 0.45) * 1);
+    hero.sprite.setY(-8);
     hero.sprite.setAngle(0);
     this.setHeroSpritePoseScale(hero, 1, 1);
   }
@@ -2555,6 +3139,14 @@ export class GameScene extends Phaser.Scene {
 
   setHeroActionFrame(hero, state, time) {
     const action = state === "block" ? "cast" : state;
+    if (action === "idle") {
+      const idleKey = `hero-${hero.id}-walk-01`;
+      if (hero.currentTextureKey !== idleKey && this.textures.exists(idleKey)) {
+        hero.sprite.setTexture(idleKey);
+        hero.currentTextureKey = idleKey;
+      }
+      return;
+    }
     const frameCount = HERO_ACTION_FRAME_COUNTS[hero.id]?.[action] ?? 0;
     const textureKey = frameCount > 0
       ? this.getHeroActionFrameKey(hero, action, frameCount, time)
@@ -3058,6 +3650,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   closeModal(silent = false) {
+    this.closeBuildMenu();
     this.modalObjects.forEach((object) => object.destroy());
     this.modalObjects = [];
     this.modalOpen = false;
@@ -3167,6 +3760,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateTowerButtons() {
+    if (this.useSlotBuildMenu) {
+      return;
+    }
     this.towerButtons.forEach(({ key, button, icon }) => {
       const selected = key === this.getPendingBuildType() && !this.selectedTower;
       const unlocked = this.isTowerUnlocked(key);
@@ -3181,6 +3777,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateSelectionPanel() {
+    if (this.useSlotBuildMenu) {
+      this.selectionText?.setVisible(false);
+      this.rallyButton?.setVisible(false);
+      this.upgradeButton?.setVisible(false);
+      this.sellButton?.setVisible(false);
+      return;
+    }
     if (!this.selectedTower) {
       const typeKey = this.getPendingBuildType();
       const type = TOWER_TYPES[typeKey];
@@ -3192,6 +3795,7 @@ export class GameScene extends Phaser.Scene {
       this.selectionText.setText(
         `${type.name}\n${unlocked ? type.description : "需要特殊塔图纸"}\n花费 ${type.price}\n${statLine}`,
       );
+      this.rallyButton.setVisible(false);
       this.upgradeButton.setVisible(false);
       this.sellButton.setVisible(false);
       return;
@@ -3210,6 +3814,8 @@ export class GameScene extends Phaser.Scene {
     this.selectionText.setText(
       `${this.getTowerDisplayName(tower)} Lv.${tower.level}\n${towerDescription}\n${towerStatLine}`,
     );
+    this.rallyButton.setVisible(tower.typeKey === "barracks");
+    this.setButtonEnabled(this.rallyButton, tower.typeKey === "barracks");
     this.upgradeButton.setVisible(true);
     this.sellButton.setVisible(true);
     this.setButtonLabel(this.upgradeButton, atMax ? "已满级" : branchReady ? `四级分支 ${upgradeCost}` : `升级 ${upgradeCost}`);
