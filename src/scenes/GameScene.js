@@ -91,25 +91,35 @@ const TOWER_STATE_ASSETS = {
     },
   },
 };
-const HERO_POSES = ["move", "attack", "block"];
-const HERO_TEXTURE_SIZE = 46;
-const HERO_POSE_ASSETS = {
+const HERO_ACTION_FRAME_COUNTS = {
   tiezhu: {
-    move: new URL("../assets/heroes/tiezhu-move.png", import.meta.url).href,
-    attack: new URL("../assets/heroes/tiezhu-attack.png", import.meta.url).href,
-    block: new URL("../assets/heroes/tiezhu-block.png", import.meta.url).href,
+    walk: 5,
+    run: 5,
+    attack: 4,
+    cast: 4,
+    ultimate: 3,
+    defeated: 4,
   },
   ergou: {
-    move: new URL("../assets/heroes/ergou-move.png", import.meta.url).href,
-    attack: new URL("../assets/heroes/ergou-attack.png", import.meta.url).href,
-    block: new URL("../assets/heroes/ergou-block.png", import.meta.url).href,
+    walk: 4,
+    run: 4,
+    attack: 4,
+    cast: 4,
+    ultimate: 3,
+    defeated: 4,
   },
   yueguang: {
-    move: new URL("../assets/heroes/yueguang-move.png", import.meta.url).href,
-    attack: new URL("../assets/heroes/yueguang-attack.png", import.meta.url).href,
-    block: new URL("../assets/heroes/yueguang-block.png", import.meta.url).href,
+    walk: 4,
+    run: 4,
+    attack: 4,
+    cast: 4,
+    ultimate: 3,
+    defeated: 4,
   },
 };
+const HERO_TEXTURE_SIZE = 46;
+const HERO_ACTION_FRAME_MS = 120;
+const HERO_RUN_SPEED_THRESHOLD = 105;
 
 export class GameScene extends Phaser.Scene {
   constructor() {
@@ -234,9 +244,11 @@ export class GameScene extends Phaser.Scene {
         nextHealAt: 0,
         actionState: "idle",
         actionUntil: 0,
+        actionStartedAt: 0,
         attackCount: 0,
         blockStreak: 0,
         dead: false,
+        defeatedAt: 0,
         respawnAt: 0,
       };
 
@@ -258,9 +270,15 @@ export class GameScene extends Phaser.Scene {
     this.load.image("hero-tiezhu", new URL("../assets/heroes/tiezhu.png", import.meta.url).href);
     this.load.image("hero-ergou", new URL("../assets/heroes/ergou.png", import.meta.url).href);
     this.load.image("hero-yueguang", new URL("../assets/heroes/yueguang.png", import.meta.url).href);
-    Object.entries(HERO_POSE_ASSETS).forEach(([heroId, poses]) => {
-      Object.entries(poses).forEach(([pose, assetUrl]) => {
-        this.load.image(`hero-${heroId}-${pose}`, assetUrl);
+    Object.entries(HERO_ACTION_FRAME_COUNTS).forEach(([heroId, actions]) => {
+      Object.entries(actions).forEach(([action, frameCount]) => {
+        for (let index = 1; index <= frameCount; index += 1) {
+          const frame = String(index).padStart(2, "0");
+          this.load.image(
+            `hero-${heroId}-${action}-${frame}`,
+            new URL(`../assets/heroes/action-sheets/${heroId}-${action}-${frame}.png`, import.meta.url).href,
+          );
+        }
       });
     });
     this.load.image("tower-arrow", new URL("../assets/towers/arrow.png", import.meta.url).href);
@@ -2200,6 +2218,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     hero.dead = false;
+    hero.defeatedAt = 0;
     hero.respawnAt = 0;
     hero.hp = Math.max(1, Math.round(hero.stats.maxHp * 0.45));
     hero.group?.setAlpha(1);
@@ -2231,10 +2250,12 @@ export class GameScene extends Phaser.Scene {
       if (this.isHeroPointWalkable(nextX, nextY)) {
         hero.x = nextX;
         hero.y = nextY;
+        hero.lastMoveSpeed = step / Math.max(dt, 0.001);
         moving = true;
       } else {
         hero.targetX = hero.x;
         hero.targetY = hero.y;
+        hero.lastMoveSpeed = 0;
         this.addFloatingText(hero.x, hero.y - 34, "受阻", "#9c2b24");
       }
     }
@@ -2282,6 +2303,7 @@ export class GameScene extends Phaser.Scene {
     const heal = hero.stats.healPower + Math.round((hero.stats.magic ?? 0) * 0.45);
     target.hp = Math.min(target.stats.maxHp, target.hp + heal);
     this.addFloatingText(target.x, target.y - 34, `+${heal}`, "#3a8f52");
+    this.playHeroCastAction(hero);
     hero.nextHealAt = time + 2400;
   }
 
@@ -2384,6 +2406,7 @@ export class GameScene extends Phaser.Scene {
       hero.hp = 0;
       hero.dead = true;
       hero.blockStreak = 0;
+      hero.defeatedAt = this.time.now;
       hero.respawnAt = this.time.now + HERO_RESPAWN_MS;
       hero.group.setAlpha(0.42);
       if (this.selectedHero === hero) {
@@ -2415,6 +2438,7 @@ export class GameScene extends Phaser.Scene {
   recoverHeroes(ratio) {
     this.heroes.forEach((hero) => {
       hero.dead = false;
+      hero.defeatedAt = 0;
       hero.respawnAt = 0;
       hero.group?.setAlpha(1);
       hero.hp = Math.min(hero.stats.maxHp, Math.max(hero.hp, hero.stats.maxHp * ratio));
@@ -2437,15 +2461,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   updateHeroActionPose(hero, time, moving) {
-    if (!hero.sprite || hero.dead) {
+    if (!hero.sprite) {
       return;
     }
 
-    const actionActive = (hero.actionUntil ?? 0) > time;
-    const state = actionActive ? hero.actionState : moving ? "move" : "idle";
+    const actionActive = !hero.dead && (hero.actionUntil ?? 0) > time;
+    const state = hero.dead
+      ? "defeated"
+      : actionActive
+        ? hero.actionState
+        : moving
+          ? this.getHeroMovementState(hero)
+          : "walk";
     const phase = time * 0.012 + (hero.id === "ergou" ? 1.2 : hero.id === "yueguang" ? 2.4 : 0);
 
-    this.setHeroPoseTexture(hero, state);
+    this.setHeroActionFrame(hero, state, time);
     hero.sprite.setFlipX((hero.moveDirection ?? 1) < 0);
     hero.sprite.setAlpha(1);
     hero.actionAura?.setAlpha(0);
@@ -2454,7 +2484,7 @@ export class GameScene extends Phaser.Scene {
     hero.shadow?.setScale(1, 1);
     hero.sprite.setX(0);
 
-    if (state === "move") {
+    if (state === "walk" || state === "run") {
       hero.sprite.setAngle(Math.sin(phase) * 5);
       hero.sprite.setY(-8 + Math.abs(Math.sin(phase)) * -3);
       this.setHeroSpritePoseScale(hero, 1 + Math.sin(phase) * 0.025, 1 - Math.sin(phase) * 0.02);
@@ -2469,6 +2499,17 @@ export class GameScene extends Phaser.Scene {
       hero.sprite.setY(-8 - lunge * 0.3);
       hero.sprite.setX((hero.sprite.flipX ? -1 : 1) * lunge);
       this.setHeroSpritePoseScale(hero, 1.08, 0.94);
+      return;
+    }
+
+    if (state === "cast") {
+      const progress = Phaser.Math.Clamp(1 - (hero.actionUntil - time) / 360, 0, 1);
+      hero.sprite.setAngle(Math.sin(progress * Math.PI * 2) * 3);
+      hero.sprite.setY(-9 + Math.sin(progress * Math.PI) * -4);
+      this.setHeroSpritePoseScale(hero, 1.08, 1.04);
+      hero.actionAura?.setAlpha(0.48 * (1 - progress));
+      hero.actionAura?.setScale(1.05 + progress * 0.85);
+      hero.actionAura?.setStrokeStyle(4, hero.accent, 0.72 * (1 - progress));
       return;
     }
 
@@ -2494,19 +2535,53 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    if (state === "defeated") {
+      const progress = Phaser.Math.Clamp(1 - (hero.respawnAt - time) / HERO_RESPAWN_MS, 0, 1);
+      hero.sprite.setAngle(0);
+      hero.sprite.setY(-3 + Math.sin(progress * Math.PI * 6) * 0.3);
+      this.setHeroSpritePoseScale(hero, 1, 1);
+      hero.shadow?.setScale(1.18, 0.82);
+      return;
+    }
+
     hero.sprite.setY(-8 + Math.sin(phase * 0.45) * 1);
     hero.sprite.setAngle(0);
     this.setHeroSpritePoseScale(hero, 1, 1);
   }
 
-  setHeroPoseTexture(hero, state) {
-    const pose = state === "ultimate" ? "block" : state;
-    const textureKey = HERO_POSES.includes(pose) ? `hero-${hero.id}-${pose}` : `hero-${hero.id}`;
+  getHeroMovementState(hero) {
+    return (hero.lastMoveSpeed ?? HERO_MOVE_SPEED) >= HERO_RUN_SPEED_THRESHOLD ? "run" : "walk";
+  }
+
+  setHeroActionFrame(hero, state, time) {
+    const action = state === "block" ? "cast" : state;
+    const frameCount = HERO_ACTION_FRAME_COUNTS[hero.id]?.[action] ?? 0;
+    const textureKey = frameCount > 0
+      ? this.getHeroActionFrameKey(hero, action, frameCount, time)
+      : `hero-${hero.id}`;
 
     if (hero.currentTextureKey !== textureKey && this.textures.exists(textureKey)) {
       hero.sprite.setTexture(textureKey);
       hero.currentTextureKey = textureKey;
     }
+  }
+
+  getHeroActionFrameKey(hero, action, frameCount, time) {
+    if (action === "walk" || action === "run") {
+      const frame = Math.floor(time / HERO_ACTION_FRAME_MS) % frameCount;
+      return `hero-${hero.id}-${action}-${String(frame + 1).padStart(2, "0")}`;
+    }
+
+    if (action === "defeated") {
+      const elapsed = Math.max(0, time - (hero.defeatedAt ?? time));
+      const frame = Math.min(frameCount - 1, Math.floor(elapsed / 180));
+      return `hero-${hero.id}-defeated-${String(frame + 1).padStart(2, "0")}`;
+    }
+
+    const duration = Math.max(1, hero.actionDuration ?? HERO_ACTION_FRAME_MS * frameCount);
+    const elapsed = Phaser.Math.Clamp(time - (hero.actionStartedAt ?? time), 0, duration - 1);
+    const frame = Math.min(frameCount - 1, Math.floor((elapsed / duration) * frameCount));
+    return `hero-${hero.id}-${action}-${String(frame + 1).padStart(2, "0")}`;
   }
 
   setHeroSpritePoseScale(hero, scaleX, scaleY = scaleX) {
@@ -2518,16 +2593,22 @@ export class GameScene extends Phaser.Scene {
 
   setHeroAction(hero, state, duration) {
     hero.actionState = state;
+    hero.actionStartedAt = this.time.now;
+    hero.actionDuration = duration;
     hero.actionUntil = this.time.now + duration;
   }
 
   playHeroAttackAction(hero, target) {
     hero.moveDirection = target.sprite.x >= hero.x ? 1 : -1;
-    this.setHeroAction(hero, "attack", 220);
+    this.setHeroAction(hero, "attack", 360);
+  }
+
+  playHeroCastAction(hero) {
+    this.setHeroAction(hero, "cast", 360);
   }
 
   playHeroBlockAction(hero) {
-    this.setHeroAction(hero, "block", 300);
+    this.setHeroAction(hero, "block", 360);
     const shield = this.add.circle(hero.x, hero.y - 12, 22, hero.accent, 0.14)
       .setStrokeStyle(4, hero.accent, 0.9)
       .setDepth(25);
@@ -2541,7 +2622,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   playHeroUltimateAction(hero, target) {
-    this.setHeroAction(hero, "ultimate", 680);
+    this.setHeroAction(hero, "ultimate", 720);
     const color = hero.id === "tiezhu" ? 0x9fb8d6 : hero.id === "ergou" ? 0xffc34f : 0xdcc8ff;
     const burst = this.add.circle(hero.x, hero.y - 12, 16, color, 0.18)
       .setStrokeStyle(5, color, 0.86)
