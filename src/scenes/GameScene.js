@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 import { CHAPTERS, getChapterByLevelId } from "../data/chapters.js";
+import { STORAGE_KEYS } from "../utils/storage.js";
 import { EASTER_EGGS } from "../data/easterEggs.js";
 import { ENEMY_SHEETS, pickWaveMonsterTypes } from "../data/monsters.js";
 import { BASIC_SHOP_ITEMS, EQUIPMENT_CATALOG, RARITY_CONFIG } from "../data/equipment.js";
 import { HERO_DEFS } from "../data/heroes.js";
-import { DEFAULT_LEVEL_ID, LEVELS, getLevelCompleteKey, isWildMerchantLevel } from "../data/levels.js";
+import { DEFAULT_LEVEL_ID, LEVELS, getLevelCompleteKey, isChapterFinalLevel, isWildMerchantLevel } from "../data/levels.js";
 import {
   CHAPTER_LAYOUT,
   GAME_HEIGHT,
@@ -143,7 +144,7 @@ export class GameScene extends Phaser.Scene {
     this.lives = 20;
     this.wave = 0;
     this.score = 0;
-    this.bestWave = Number(localStorage.getItem("crown-outpost-best-wave") || 0);
+    this.bestWave = Number(localStorage.getItem(STORAGE_KEYS.bestWave) || 0);
     this.enemies = [];
     this.towers = [];
     this.projectiles = [];
@@ -637,8 +638,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   loadClaimedEasterEggs() {
-    const oldKey = "crown-outpost-easter-eggs";
-    const newKey = "crown-outpost-easter-eggs-v2";
+    const oldKey = STORAGE_KEYS.easterEggsLegacy;
+    const newKey = STORAGE_KEYS.easterEggsV2;
     const parseJson = (value, fallback) => {
       try {
         return value ? JSON.parse(value) : fallback;
@@ -659,8 +660,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   saveClaimedEasterEggs() {
-    const oldKey = "crown-outpost-easter-eggs";
-    const newKey = "crown-outpost-easter-eggs-v2";
+    const oldKey = STORAGE_KEYS.easterEggsLegacy;
+    const newKey = STORAGE_KEYS.easterEggsV2;
     const claimed = [...this.claimedEasterEggs];
 
     localStorage.setItem(newKey, JSON.stringify({ 0: claimed }));
@@ -1832,6 +1833,8 @@ export class GameScene extends Phaser.Scene {
       burnDps: 0,
       baseTint: useSheet ? 0xffffff : stats.tint,
       usesSheet: useSheet,
+      bobPhase: Math.random() * Math.PI * 2,
+      bobAmp: useSheet ? (rank === "boss" ? 3.5 : rank === "elite" ? 3 : 2.2) : 0,
       lockedTarget: null,
       savedProgress: 0,
       barWidth,
@@ -1925,7 +1928,8 @@ export class GameScene extends Phaser.Scene {
         }
 
         const point = this.pointOnSpawnLane(enemy.laneId ?? 0, enemy.progress);
-        enemy.sprite.setPosition(point.x, point.y);
+        const bob = enemy.bobAmp ? Math.sin(time * 0.008 + enemy.bobPhase) * enemy.bobAmp : 0;
+        enemy.sprite.setPosition(point.x, point.y + bob);
         if (!enemy.usesSheet) {
           enemy.sprite.setRotation(point.angle);
         }
@@ -2422,7 +2426,7 @@ export class GameScene extends Phaser.Scene {
       boss: 1,
     };
 
-    if (this.levelId === "chapter-1-boss" && enemy.rank === "boss") {
+    if (isChapterFinalLevel(this.levelId) && enemy.rank === "boss") {
       if (Math.random() < 0.5) {
         const rarity = Math.random() < 0.6 ? "稀有" : "史诗";
         const item = this.createEquipment(pickRandom(BASIC_SHOP_ITEMS), rarity);
@@ -2462,7 +2466,7 @@ export class GameScene extends Phaser.Scene {
     this.defeatedWaves = Math.max(this.defeatedWaves, this.wave);
     this.gold += bonus;
     this.bestWave = Math.max(this.bestWave, this.wave);
-    localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
+    localStorage.setItem(STORAGE_KEYS.bestWave, String(this.bestWave));
     this.recoverHeroes(0.38);
 
     if (this.wave >= this.totalWaves) {
@@ -3664,7 +3668,7 @@ export class GameScene extends Phaser.Scene {
     this.gameEnded = true;
     this.waveActive = false;
     this.bestWave = Math.max(this.bestWave, this.wave);
-    localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
+    localStorage.setItem(STORAGE_KEYS.bestWave, String(this.bestWave));
     this.endOverlay.setVisible(true);
     this.centerText.setText(`前哨失守\n坚持到第 ${this.wave} 波\n得分 ${this.score}`);
     this.centerText.setVisible(true);
@@ -3675,8 +3679,8 @@ export class GameScene extends Phaser.Scene {
   finishVictory() {
     this.gameEnded = true;
     this.bestWave = this.totalWaves;
-    localStorage.setItem("crown-outpost-best-wave", String(this.bestWave));
-    localStorage.setItem("crown-outpost-last-score", String(this.score));
+    localStorage.setItem(STORAGE_KEYS.bestWave, String(this.bestWave));
+    localStorage.setItem(STORAGE_KEYS.lastScore, String(this.score));
     localStorage.setItem(getLevelCompleteKey(this.levelId), "true");
     this.waveActive = false;
     this.showNotice(`${this.levelConfig.name} 完成，返回章节地图`, "#315c22");
@@ -3685,7 +3689,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   finishVictorySequence() {
-    if (this.levelId === "chapter-1-boss") {
+    if (isChapterFinalLevel(this.levelId)) {
       this.openMerchant("elite", true);
       return;
     }

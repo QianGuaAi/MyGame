@@ -395,21 +395,42 @@ npm run build
 
 ```
 - [x] T1 彩蛋扩充：王铁柱连续格挡
-- [ ] T2 彩蛋数据按章节存档
-- [ ] T3 章节地图 1-2 解锁与跳转骨架
-- [ ] T4 第 1 章 1-2、1-3 战斗参数差异
-- [ ] T5 第 1 章 Boss 关掉落
-- [ ] T6 商人触发节奏对齐
-- [ ] T7 关卡推进存档
-- [ ] T8 烟雾测试
+- [ ] T2 彩蛋数据按章节存档（推迟，暂单章节）
+- [x] T3 章节地图 1-2 解锁与跳转骨架
+- [x] T4 第 1 章 1-2、1-3 战斗参数差异
+- [x] T5 第 1 章 Boss 关掉落
+- [x] T6 商人触发节奏对齐
+- [x] T7 关卡推进存档
+- [ ] T8 烟雾测试（待手测一轮）
 构建：npm run build 通过 / 失败
 手测：T1–TN 流程通过 / 失败
 ```
 
-完成全部 T1–T8 后，本文件可保留作为变更记录依据，**不要删除**。
+> 2026-05-08 更新：T1、T3–T7 已在代码中实现（见 `GameScene.js / CampaignScene.js / levels.js / storage.js`）。T2 在单章节阶段收益低，暂推迟。T8 仍需用户手测一轮。
 
 ---
 
-## 13. 变更记录
+## 13. 后续工作建议（T9 起）
 
-- 2026-05：按当前 `doc/game-design.md`（含准备阶段规则）与现有代码状态重写本文件。原 "晨曦守望 5 章 + 18 波" 任务清单已废弃。
+| 编号 | 标题 | 说明 |
+|---:|---|---|
+| T9 | 章节 2–5 关卡节点骨架 | `levels.js` 已按章节模板填充；`CampaignScene` 已支持多章节切换。剩余工作：为各章节定制节点屏幕坐标（避开彩绘地图的建筑区域），校验 `CHAPTER_LAYOUT` 中每章 `pathPoints` 与地图原画的视觉对齐。|
+| T10 | 英雄主动技能最小化实现 | 先做王铁柱「重击」（CD 10 秒，下一次攻击 +120% 伤害）作为技能系统示范，复用现有 UI 风格。|
+| T11 | 装备合成 / 分解 | 精英商人处加合成台：2 件同名普通 → 1 件稀有；稀有 → 史诗等。设计文档需先补规则。|
+| T12 | 萌怪 sheet 裁剪坐标微调 | 实际跑起来后按偏差逐张微调 `src/data/monsters.js` 中 `SHEET_LAYOUTS[*].sprite`。|
+| T13 | `GameScene.js` 结构化拆分 | 当前 3800+ 行。可拆为 `scenes/game/enemy.js`、`scenes/game/merchant.js`、`scenes/game/prepPhase.js` 等模块，以 mixin 方式注入。|
+| T14 | 资源加载前置 Loader Scene | 目前资源在各场景 preload 里重复判断；可抽一个 BootScene 统一预加载并显示进度条。|
+| T15 | 打包体积优化 | 主 bundle 已 1.3MB。引入 `import.meta.glob` 延迟加载非当前章节的贴图；或按章节动态 import。|
+
+---
+
+## 14. 变更记录
+
+- 2026-05-08：按当前 `doc/game-design.md`（含准备阶段规则）与现有代码状态重写本文件；后续多次同步更新 T1–T7 完成状态。原 "晨曦守望 5 章 + 18 波" 任务清单已废弃。
+- 2026-05-12：完成「整个项目优化」第一轮：
+  - `storage.js` 统一管理 localStorage key，全局替换字面量；
+  - `levels.js` 扩展到 5 章（`CHAPTER_LEVEL_ORDERS`、`isChapterFinalLevel`、`isLevelCompleted`）；
+  - `CampaignScene` 改为数据驱动的多章节视图，背景使用彩绘章节地图，新增上一章/下一章按钮；
+  - `GameScene` 中 `chapter-1-boss` 的硬编码替换为 `isChapterFinalLevel`，Boss 掉落与精英商人自动适配任意章节；
+  - 萌怪加入呼吸式 bob 动画（按 rank 调幅），让静态贴图看上去活起来；
+  - 追加 T9–T15 后续工作建议。

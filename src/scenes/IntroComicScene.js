@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { GAME_HEIGHT, GAME_WIDTH, TEXT_STYLE } from "../data/map.js";
+import { STORAGE_KEYS } from "../utils/storage.js";
 
-const INTRO_SEEN_KEY = "crown-outpost-intro-comic-seen";
+const INTRO_SEEN_KEY = STORAGE_KEYS.introComicSeen;
 
 const PANELS = [
   {

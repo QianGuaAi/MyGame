@@ -1,13 +1,26 @@
 import Phaser from "phaser";
-import { CHAPTER_ONE_LEVEL_ORDER, DEFAULT_LEVEL_ID, getLevelCompleteKey } from "../data/levels.js";
+import { CHAPTERS, getChapterById } from "../data/chapters.js";
+import {
+  CHAPTER_LEVEL_ORDERS,
+  DEFAULT_LEVEL_ID,
+  LEVELS,
+  getChapterIndexOfLevel,
+  getChapterLevelOrder,
+  getLevelCompleteKey,
+  isLevelCompleted,
+} from "../data/levels.js";
 import { GAME_HEIGHT, GAME_WIDTH, TEXT_STYLE } from "../data/map.js";
+import { STORAGE_KEYS } from "../utils/storage.js";
 
-const LEVEL_NODES = [
-  { id: "chapter-1-level-1", label: "1-1", name: "王冠前哨", x: 178, y: 360 },
-  { id: "chapter-1-level-2", label: "1-2", name: "北桥林道", x: 392, y: 292 },
-  { id: "chapter-1-level-3", label: "1-3", name: "旧王城门", x: 620, y: 214 },
-  { id: "chapter-1-boss", label: "BOSS", name: "黑石要塞", x: 794, y: 312 },
+// 每章 4 个节点的屏幕坐标（保持第 1 章原有布局）。
+const NODE_POSITIONS = [
+  { x: 178, y: 360 },
+  { x: 392, y: 292 },
+  { x: 620, y: 214 },
+  { x: 794, y: 312 },
 ];
+
+const NODE_LABELS = ["1", "2", "3", "BOSS"];
 
 export class CampaignScene extends Phaser.Scene {
   constructor() {
@@ -15,35 +28,70 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   init(data = {}) {
-    this.levels = this.buildLevelStates(data.completedLevelId);
+    if (data.completedLevelId) {
+      localStorage.setItem(getLevelCompleteKey(data.completedLevelId), "true");
+    }
+
+    // 兼容旧存档
+    if (localStorage.getItem(STORAGE_KEYS.legacyChapter1Level1) === "true") {
+      localStorage.setItem(getLevelCompleteKey(DEFAULT_LEVEL_ID), "true");
+    }
+
+    this.chapterIndex = this.resolveChapterIndex(data);
+    this.chapter = getChapterById(this.chapterIndex);
+    this.levels = this.buildLevelStates(this.chapterIndex);
     this.result = {
-      score: data.score ?? Number(localStorage.getItem("crown-outpost-last-score") || 0),
+      score: data.score ?? Number(localStorage.getItem(STORAGE_KEYS.lastScore) || 0),
       gold: data.gold ?? 0,
       completedLevelId: data.completedLevelId ?? DEFAULT_LEVEL_ID,
     };
   }
 
-  buildLevelStates(completedLevelId) {
-    if (completedLevelId) {
-      localStorage.setItem(getLevelCompleteKey(completedLevelId), "true");
+  resolveChapterIndex(data) {
+    if (typeof data.chapterIndex === "number") {
+      return data.chapterIndex;
     }
+    if (data.completedLevelId) {
+      const finished = getChapterIndexOfLevel(data.completedLevelId);
+      const order = getChapterLevelOrder(finished);
+      const isChapterDone = order.every((id) => isLevelCompleted(id));
+      return isChapterDone ? Math.min(finished + 1, CHAPTERS.length) : finished;
+    }
+    // 取最靠前的未通关章节
+    for (let i = 1; i <= CHAPTERS.length; i += 1) {
+      const order = getChapterLevelOrder(i);
+      if (!order.every((id) => isLevelCompleted(id))) {
+        return i;
+      }
+    }
+    return CHAPTERS.length;
+  }
 
-    const completedIds = new Set();
-    CHAPTER_ONE_LEVEL_ORDER.forEach((levelId) => {
-      if (localStorage.getItem(getLevelCompleteKey(levelId)) === "true") {
-        completedIds.add(levelId);
+  buildLevelStates(chapterIndex) {
+    const order = getChapterLevelOrder(chapterIndex);
+    const completedIds = new Set(order.filter((id) => isLevelCompleted(id)));
+    const nextIndex = order.findIndex((id) => !completedIds.has(id));
+    return order.map((id, index) => {
+      const config = LEVELS[id] ?? {};
+      const pos = NODE_POSITIONS[index] ?? NODE_POSITIONS[NODE_POSITIONS.length - 1];
+      const isBoss = index === order.length - 1;
+      return {
+        id,
+        label: isBoss ? "BOSS" : `${chapterIndex}-${NODE_LABELS[index]}`,
+        name: config.name ?? id,
+        x: pos.x,
+        y: pos.y,
+        status: completedIds.has(id) ? "completed" : index === nextIndex ? "next" : "locked",
+      };
+    });
+  }
+
+  preload() {
+    CHAPTERS.forEach((chapter) => {
+      if (!this.textures.exists(chapter.mapKey)) {
+        this.load.image(chapter.mapKey, chapter.mapUrl);
       }
     });
-
-    if (localStorage.getItem("crown-outpost-chapter-1-level-1-complete") === "true") {
-      completedIds.add(DEFAULT_LEVEL_ID);
-    }
-
-    const nextIndex = CHAPTER_ONE_LEVEL_ORDER.findIndex((levelId) => !completedIds.has(levelId));
-    return LEVEL_NODES.map((level, index) => ({
-      ...level,
-      status: completedIds.has(level.id) ? "completed" : index === nextIndex ? "next" : "locked",
-    }));
   }
 
   create() {
@@ -57,20 +105,29 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   drawBackground() {
+    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2a3626).setOrigin(0);
+
+    const mapKey = this.chapter?.mapKey;
+    if (mapKey && this.textures.exists(mapKey)) {
+      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, mapKey)
+        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
+        .setAlpha(0.72);
+      this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x241a0c, 0.28).setOrigin(0);
+      return;
+    }
+
+    // Fallback：旧的程序化背景
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x527a50).setOrigin(0);
     this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0xd1b56f, 0.18).setOrigin(0);
-
     const sky = this.add.graphics();
     sky.fillStyle(0x80a8bd, 1);
     sky.fillRect(0, 0, GAME_WIDTH, 72);
     sky.fillStyle(0xf4e1a6, 1);
     sky.fillRect(0, 56, GAME_WIDTH, 20);
-
     const sea = this.add.graphics();
     sea.fillStyle(0x4f8ca1, 1);
     sea.fillEllipse(880, 95, 240, 130);
     sea.fillEllipse(922, 440, 230, 190);
-
     this.drawMountains();
     this.drawForests();
     this.drawSettlements();
@@ -236,7 +293,8 @@ export class CampaignScene extends Phaser.Scene {
   drawHeader() {
     this.add.rectangle(GAME_WIDTH / 2, 48, 728, 62, 0x58361b, 0.92)
       .setStrokeStyle(4, 0xf2ca73, 1);
-    this.add.text(GAME_WIDTH / 2, 33, "第一章 边境林道", {
+    const chapterName = this.chapter?.name ?? "未命名章节";
+    this.add.text(GAME_WIDTH / 2, 33, `第${this.chapterIndex}章 ${chapterName}`, {
       ...TEXT_STYLE,
       fontSize: "27px",
       color: "#fff1bd",
@@ -248,6 +306,38 @@ export class CampaignScene extends Phaser.Scene {
       color: "#f2d994",
       align: "center",
     }).setOrigin(0.5);
+
+    // 章节切换按钮
+    if (this.chapterIndex > 1) {
+      this.createButton(88, 48, 110, 32, "← 上一章", () => this.switchChapter(this.chapterIndex - 1), {
+        fill: 0x8d6b3c,
+        stroke: 0x4b3415,
+        color: "#fff1bd",
+        hoverFill: 0xa58453,
+      });
+    }
+    if (this.chapterIndex < CHAPTERS.length && this.isChapterUnlocked(this.chapterIndex + 1)) {
+      this.createButton(872, 48, 110, 32, "下一章 →", () => this.switchChapter(this.chapterIndex + 1), {
+        fill: 0x5a8645,
+        stroke: 0x2f4a26,
+        color: "#fff7d6",
+        hoverFill: 0x6f9a58,
+      });
+    }
+  }
+
+  isChapterUnlocked(chapterIndex) {
+    if (chapterIndex <= 1) return true;
+    const prevOrder = getChapterLevelOrder(chapterIndex - 1);
+    return prevOrder.every((id) => isLevelCompleted(id));
+  }
+
+  switchChapter(chapterIndex) {
+    if (!this.isChapterUnlocked(chapterIndex)) {
+      this.showNotice("该章节尚未解锁");
+      return;
+    }
+    this.scene.restart({ chapterIndex });
   }
 
   drawFooter() {
@@ -259,7 +349,9 @@ export class CampaignScene extends Phaser.Scene {
       color: "#fff1bd",
     }).setOrigin(0, 0.5);
 
-    this.createButton(650, 504, 138, 34, "重玩第一关", () => this.scene.start("GameScene", { levelId: DEFAULT_LEVEL_ID }), {
+    const order = getChapterLevelOrder(this.chapterIndex);
+    const firstId = order[0];
+    this.createButton(650, 504, 138, 34, `重玩 ${this.chapterIndex}-1`, () => this.scene.start("GameScene", { levelId: firstId }), {
       fill: 0xf5b83c,
       stroke: 0x89501f,
       color: "#3b250f",
@@ -325,7 +417,13 @@ export class CampaignScene extends Phaser.Scene {
       return;
     }
 
-    this.showNotice("第一章已全部完成");
+    // 当前章节已全部完成；若有下一章且已解锁，则切换
+    if (this.chapterIndex < CHAPTERS.length && this.isChapterUnlocked(this.chapterIndex + 1)) {
+      this.switchChapter(this.chapterIndex + 1);
+      return;
+    }
+
+    this.showNotice(`第${this.chapterIndex}章已全部完成`);
   }
 
   showNotice(message) {

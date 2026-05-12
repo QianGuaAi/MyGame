@@ -2,9 +2,17 @@ const PREFIX = "crown-outpost-";
 
 export const STORAGE_KEYS = {
   bestWave: PREFIX + "best-wave",
-  easterEggs: PREFIX + "easter-eggs",
+  lastScore: PREFIX + "last-score",
+  easterEggsLegacy: PREFIX + "easter-eggs",
+  easterEggsV2: PREFIX + "easter-eggs-v2",
+  introComicSeen: PREFIX + "intro-comic-seen",
+  legacyChapter1Level1: PREFIX + "chapter-1-level-1-complete",
   save: PREFIX + "save-v1",
 };
+
+export function levelCompleteKey(levelId) {
+  return `${PREFIX}${levelId}-complete`;
+}
 
 export function readJSON(key, fallback = null) {
   try {
