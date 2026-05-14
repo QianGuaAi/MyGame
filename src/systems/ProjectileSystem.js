@@ -11,29 +11,54 @@ export class ProjectileSystem {
     this.scene = scene;
   }
 
+  getProjectileTexture(tower) {
+    const kind = tower.projectileKind ?? TOWER_TYPES[tower.typeKey]?.projectile;
+    if (kind === "arrow") {
+      if (tower.branch === "burst") return "proj-arrow-burst";
+      if (tower.branch === "hawk") return "proj-arrow-hawk";
+      return "proj-arrow-basic";
+    }
+    if (kind === "meteor") return "proj-meteor";
+    if (kind === "bomb") {
+      if (tower.branch === "shrapnel") return "proj-shrapnel";
+      return "proj-bomb";
+    }
+    if (kind === "flame") return "proj-flame";
+    if (kind === "orb") {
+      if (tower.typeKey === "frost") return "proj-frost-shard";
+      return "proj-magic-bolt";
+    }
+    return null;
+  }
+
   fireTower(tower, target, time) {
     const s = this.scene;
     const type = TOWER_TYPES[tower.typeKey];
     const projectileKind = tower.projectileKind ?? type.projectile;
+    const texKey = this.getProjectileTexture(tower);
+    const hasTexture = texKey && s.textures.exists(texKey);
 
     if (projectileKind === "meteor") {
-      const meteor = s.add.circle(target.sprite.x - 72, target.sprite.y - 130, 14, 0xff6a2b, 1)
-        .setStrokeStyle(3, 0xffd18a, 0.9)
-        .setDepth(24);
-      s.projectiles.push(this.createProjectileData(meteor, tower, target, {
+      const startX = target.sprite.x - 72;
+      const startY = target.sprite.y - 130;
+      const sprite = hasTexture
+        ? s.add.image(startX, startY, texKey).setScale(0.55).setDepth(24)
+        : s.add.circle(startX, startY, 14, 0xff6a2b, 1).setStrokeStyle(3, 0xffd18a, 0.9).setDepth(24);
+      s.projectiles.push(this.createProjectileData(sprite, tower, target, {
         speed: tower.projectileSpeed || 760,
         targetX: target.sprite.x,
         targetY: target.sprite.y,
       }));
     } else if (projectileKind === "arrow") {
-      const arrow = s.add.image(tower.x, tower.y - 16, "arrow-shot")
-        .setDepth(22);
-      s.projectiles.push(this.createProjectileData(arrow, tower, target));
+      const sprite = hasTexture
+        ? s.add.image(tower.x, tower.y - 16, texKey).setScale(0.45).setDepth(22)
+        : s.add.image(tower.x, tower.y - 16, "arrow-shot").setDepth(22);
+      s.projectiles.push(this.createProjectileData(sprite, tower, target));
     } else {
-      const projectile = s.add.circle(tower.x, tower.y - 16, tower.splash ? 7 : 6, type.color, 1)
-        .setStrokeStyle(2, type.accent, 0.8)
-        .setDepth(22);
-      s.projectiles.push(this.createProjectileData(projectile, tower, target));
+      const sprite = hasTexture
+        ? s.add.image(tower.x, tower.y - 16, texKey).setScale(0.4).setDepth(22)
+        : s.add.circle(tower.x, tower.y - 16, tower.splash ? 7 : 6, type.color, 1).setStrokeStyle(2, type.accent, 0.8).setDepth(22);
+      s.projectiles.push(this.createProjectileData(sprite, tower, target));
     }
 
     tower.nextFireAt = time + tower.rate * this.scene.towerSystem.getTowerRateMultiplier(tower);

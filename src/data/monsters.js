@@ -92,6 +92,59 @@ function buildMonsterCatalog() {
 
 export const MONSTERS = buildMonsterCatalog();
 
+// ─── 新帧驱动怪物表 ───────────────────────────────────────
+// 每只怪对应 src/assets/enemies/{id}/ 下的 walk/attack/death 帧
+// tier: 1-10，与 WAVE_TIER_BANDS 一致
+// walkFrames/attackFrames/deathFrames: 帧数（加载时已验证）
+const FRAME_MONSTER_DEFS = [
+  // tier 1
+  { id: "sprout-01",   tier: 1,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "mushroom-02", tier: 1,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "boar-03",     tier: 1,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "wisp-04",     tier: 1,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 2
+  { id: "lizard-05",   tier: 2,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "golem-06",    tier: 2,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "shadow-07",   tier: 2,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "snow-08",     tier: 2,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 3
+  { id: "sprout-09",   tier: 3,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "mushroom-10", tier: 3,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "boar-11",     tier: 3,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "wisp-12",     tier: 3,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 4
+  { id: "lizard-13",   tier: 4,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "golem-14",    tier: 4,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "shadow-15",   tier: 4,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "snow-16",     tier: 4,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 5
+  { id: "sprout-17",   tier: 5,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "mushroom-18", tier: 5,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "boar-19",     tier: 5,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "wisp-20",     tier: 5,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 6
+  { id: "lizard-21",   tier: 6,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "golem-22",    tier: 6,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "shadow-23",   tier: 6,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "snow-24",     tier: 6,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 7
+  { id: "sprout-25",   tier: 7,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "mushroom-26", tier: 7,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "boar-27",     tier: 7,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "wisp-28",     tier: 7,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  // tier 8
+  { id: "lizard-29",   tier: 8,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+  { id: "golem-30",    tier: 8,  walkFrames: 4, attackFrames: 3, deathFrames: 3 },
+];
+
+export const FRAME_MONSTERS = FRAME_MONSTER_DEFS.map((def) => ({
+  ...def,
+  useFrames: true,
+  walkKey: (n) => `enemy-${def.id}-walk-${String(n).padStart(2, "0")}`,
+  attackKey: (n) => `enemy-${def.id}-attack-${String(n).padStart(2, "0")}`,
+  deathKey: (n) => `enemy-${def.id}-death-${String(n).padStart(2, "0")}`,
+}));
+
 const WAVE_TIER_BANDS = [
   { min: 1, max: 1, types: 1 },
   { min: 1, max: 2, types: 2 },
@@ -114,10 +167,14 @@ export function getWaveBand(wave) {
 
 export function pickWaveMonsterTypes(wave, rng = Math.random) {
   const band = getWaveBand(wave);
-  const eligible = MONSTERS.filter((monster) => monster.tier >= band.min && monster.tier <= band.max);
 
+  // Prefer frame-based monsters; fall back to legacy sheet catalog.
+  let eligible = FRAME_MONSTERS.filter((m) => m.tier >= band.min && m.tier <= band.max);
   if (eligible.length === 0) {
-    return MONSTERS.slice(0, 1);
+    eligible = MONSTERS.filter((m) => m.tier >= band.min && m.tier <= band.max);
+  }
+  if (eligible.length === 0) {
+    return FRAME_MONSTERS.slice(0, 1);
   }
 
   const want = Math.min(band.types, eligible.length);

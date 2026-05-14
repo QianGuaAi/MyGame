@@ -61,20 +61,39 @@ export class EnemySystem {
     const laneId = this.scene.mapSystem.nextSpawnLaneId();
     const lane = this.scene.mapSystem.getSpawnLane(laneId);
     const point = this.scene.mapSystem.pointOnSpawnLane(laneId, 0);
-    const useBossStatic = rank === "boss" && s.textures.exists(bossKey) && !bossKey.startsWith("enemy-");
-    const useSheet = !useBossStatic && monster && s.textures.exists(monster.sheetKey) && s.textures.get(monster.sheetKey).has(monster.frameKey);
-    const textureKey = useBossStatic ? bossKey : (useSheet ? monster.sheetKey : stats.texture);
+    // Boss 帧动画：若章节配置了 bossFrameId 且对应资源已加载，覆盖 monster 引用
+    let frameMonster = monster?.useFrames ? monster : null;
+    if (rank === "boss" && layout.bossFrameId) {
+      const id = layout.bossFrameId;
+      if (s.textures.exists(`enemy-${id}-walk-01`)) {
+        frameMonster = {
+          id,
+          tier: 10,
+          useFrames: true,
+          walkFrames: 4,
+          attackFrames: 4,
+          deathFrames: 4,
+          walkKey: (n) => `enemy-${id}-walk-${String(n).padStart(2, "0")}`,
+          attackKey: (n) => `enemy-${id}-attack-${String(n).padStart(2, "0")}`,
+          deathKey: (n) => `enemy-${id}-death-${String(n).padStart(2, "0")}`,
+        };
+      }
+    }
+    const useFrames = frameMonster?.useFrames && s.textures.exists(frameMonster.walkKey(1));
+    const useBossStatic = !useFrames && rank === "boss" && s.textures.exists(bossKey) && !bossKey.startsWith("enemy-");
+    const useSheet = !useFrames && !useBossStatic && monster && s.textures.exists(monster.sheetKey) && s.textures.get(monster.sheetKey).has(monster.frameKey);
+    const textureKey = useFrames ? frameMonster.walkKey(1) : (useBossStatic ? bossKey : (useSheet ? monster.sheetKey : stats.texture));
     const frameKey = useSheet ? monster.frameKey : undefined;
-    const sprite = (useBossStatic
-      ? s.add.image(point.x, point.y, textureKey)
-      : s.add.sprite(point.x, point.y, textureKey, frameKey))
-      .setRotation(useSheet ? 0 : point.angle)
+    // §21.4: 怪物素材默认面向左，代码不翻转。仅程序化贴图按路径角度旋转。
+    const sprite = s.add.image(point.x, point.y, textureKey)
+      .setRotation(useFrames || useSheet ? 0 : point.angle)
       .setDepth(18);
-    if (useSheet) {
-      const targetSize = (rank === "boss" ? 56 : rank === "elite" ? 46 : rank === "heavy" ? 42 : 36) * stats.scale;
+    const targetSize = (rank === "boss" ? 56 : rank === "elite" ? 46 : rank === "heavy" ? 42 : 36) * stats.scale;
+    if (useFrames) {
+      sprite.setScale(targetSize / 96);
+    } else if (useSheet) {
       const maxDim = Math.max(monster.frame.w, monster.frame.h);
-      const fit = targetSize / maxDim;
-      sprite.setScale(fit);
+      sprite.setScale(targetSize / maxDim);
     } else {
       sprite.setScale(stats.scale).setTint(stats.tint);
     }
@@ -106,10 +125,15 @@ export class EnemySystem {
       slowFactor: 1,
       burnUntil: 0,
       burnDps: 0,
-      baseTint: useSheet ? 0xffffff : stats.tint,
+      baseTint: (useFrames || useSheet) ? 0xffffff : stats.tint,
       usesSheet: useSheet,
+      useFrames,
+      frameDef: useFrames ? frameMonster : null,
+      animFrame: 1,
+      animNextAt: 0,
+      animState: "walk",
       bobPhase: Math.random() * Math.PI * 2,
-      bobAmp: useSheet ? (rank === "boss" ? 3.5 : rank === "elite" ? 3 : 2.2) : 0,
+      bobAmp: (useFrames || useSheet) ? (rank === "boss" ? 3.5 : rank === "elite" ? 3 : 2.2) : 0,
       lockedTarget: null,
       savedProgress: 0,
       barWidth,
@@ -171,6 +195,7 @@ export class EnemySystem {
           enemy.savedProgress = enemy.progress;
           enemy.lockedTarget = best.ref;
           best.attackers.add(enemy);
+          this.setEnemyAnimState(enemy, "attack");
         }
       }
 
@@ -191,7 +216,7 @@ export class EnemySystem {
             enemy.sprite.x += ((targetX - enemy.sprite.x) / distance) * step;
             enemy.sprite.y += ((targetY - enemy.sprite.y) / distance) * step;
           }
-          if (!enemy.usesSheet) {
+          if (!enemy.usesSheet && !enemy.useFrames) {
             enemy.sprite.setRotation(Phaser.Math.Angle.Between(enemy.sprite.x, enemy.sprite.y, targetX, targetY));
           }
         }
@@ -206,7 +231,7 @@ export class EnemySystem {
         const point = this.scene.mapSystem.pointOnSpawnLane(enemy.laneId ?? 0, enemy.progress);
         const bob = enemy.bobAmp ? Math.sin(time * 0.008 + enemy.bobPhase) * enemy.bobAmp : 0;
         enemy.sprite.setPosition(point.x, point.y + bob);
-        if (!enemy.usesSheet) {
+        if (!enemy.usesSheet && !enemy.useFrames) {
           enemy.sprite.setRotation(point.angle);
         }
       }
@@ -215,7 +240,31 @@ export class EnemySystem {
       enemy.barBack.setPosition(enemy.sprite.x - enemy.barWidth / 2, enemy.sprite.y - 28);
       enemy.barFill.setPosition(enemy.sprite.x - enemy.barWidth / 2, enemy.sprite.y - 28);
       enemy.barFill.setDisplaySize(enemy.barWidth * Phaser.Math.Clamp(enemy.hp / enemy.maxHp, 0, 1), 5);
+
+      if (enemy.useFrames && enemy.frameDef && time >= enemy.animNextAt) {
+        this.advanceEnemyAnim(enemy, time);
+      }
     });
+  }
+
+  advanceEnemyAnim(enemy, time) {
+    const def = enemy.frameDef;
+    const isAttacking = enemy.animState === "attack";
+    const frameCount = isAttacking ? def.attackFrames : def.walkFrames;
+    const msPerFrame = isAttacking ? 160 : 140;
+    enemy.animFrame = (enemy.animFrame % frameCount) + 1;
+    enemy.animNextAt = time + msPerFrame;
+    const texKey = isAttacking ? def.attackKey(enemy.animFrame) : def.walkKey(enemy.animFrame);
+    if (this.scene.textures.exists(texKey)) {
+      enemy.sprite.setTexture(texKey);
+    }
+  }
+
+  setEnemyAnimState(enemy, state) {
+    if (!enemy.useFrames || enemy.animState === state) return;
+    enemy.animState = state;
+    enemy.animFrame = 0;
+    enemy.animNextAt = 0;
   }
 
   clearEnemyLock(enemy) {
@@ -224,6 +273,7 @@ export class EnemySystem {
       enemy.progress = Math.max(enemy.progress, enemy.savedProgress);
     }
     enemy.lockedTarget = null;
+    this.setEnemyAnimState(enemy, "walk");
   }
 
   collectAggroCandidates() {

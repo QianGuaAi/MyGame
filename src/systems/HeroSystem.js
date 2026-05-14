@@ -257,7 +257,13 @@ export class HeroSystem {
         fontSize: "12px",
         color: "#315c22",
       });
-      const container = s.add.container(x, y, [bg, portraitImage, name, hp])
+      const skillIconKey = `icon-skill-${hero.id}`;
+      const skillIcon = s.textures.exists(skillIconKey)
+        ? s.add.image(80, 44, skillIconKey).setDisplaySize(18, 18)
+        : null;
+      const containerItems = [bg, portraitImage, name, hp];
+      if (skillIcon) containerItems.push(skillIcon);
+      const container = s.add.container(x, y, containerItems)
         .setDepth(35)
         .setSize(98, 58)
         .setInteractive(new Phaser.Geom.Rectangle(0, 0, 98, 58), Phaser.Geom.Rectangle.Contains);

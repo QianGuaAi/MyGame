@@ -32,9 +32,19 @@ export class IntroComicScene extends Phaser.Scene {
     super("IntroComicScene");
   }
 
+  preload() {
+    this.load.on("loaderror", () => {});
+    for (let i = 1; i <= 4; i++) {
+      const key = `comic-ch1-prologue-${i}`;
+      if (!this.textures.exists(key)) {
+        this.load.image(key, new URL("../assets/comics/ch1-prologue-" + i + ".png", import.meta.url).href);
+      }
+    }
+  }
+
   create() {
     if (localStorage.getItem(INTRO_SEEN_KEY) === "true") {
-      this.scene.start("GameScene");
+      this.scene.start("CampaignScene");
       return;
     }
 
@@ -106,6 +116,15 @@ export class IntroComicScene extends Phaser.Scene {
   }
 
   drawComicArt(panel, x, y, width, height) {
+    const texKey = `comic-ch1-prologue-${this.panelIndex + 1}`;
+    if (this.textures.exists(texKey)) {
+      const img = this.add.image(x + width / 2, y + height / 2, texKey)
+        .setDisplaySize(width - 8, height - 8)
+        .setOrigin(0.5);
+      this.panelLayer.add(img);
+      return;
+    }
+
     const art = this.add.graphics();
     this.panelLayer.add(art);
 
@@ -224,7 +243,7 @@ export class IntroComicScene extends Phaser.Scene {
 
   finishIntro() {
     localStorage.setItem(INTRO_SEEN_KEY, "true");
-    this.scene.start("GameScene");
+    this.scene.start("CampaignScene");
   }
 
   createButton(x, y, width, height, label, onClick) {

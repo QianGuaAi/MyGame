@@ -4,6 +4,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from "./data/map.js";
 import { CampaignScene } from "./scenes/CampaignScene.js";
 import { GameScene } from "./scenes/GameScene.js";
 import { IntroComicScene } from "./scenes/IntroComicScene.js";
+import { SplashScene } from "./scenes/SplashScene.js";
 
 const config = {
   type: Phaser.AUTO,
@@ -15,7 +16,7 @@ const config = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [IntroComicScene, GameScene, CampaignScene],
+  scene: [SplashScene, IntroComicScene, GameScene, CampaignScene],
 };
 
 new Phaser.Game(config);

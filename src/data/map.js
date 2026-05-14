@@ -16,6 +16,7 @@ export const CHAPTER_LAYOUT = [
     // [初版-待校验] 第 1 章 边境平原（黄绿草原）
     name: "边境平原",
     backgroundKey: "ch1-map",
+    bossFrameId: "boss-ch1",
     pathPoints: [
       [-40, 45], [70, 160], [250, 250], [360, 285],
       [480, 225], [600, 225], [690, 280], [760, 220],
@@ -50,7 +51,8 @@ export const CHAPTER_LAYOUT = [
     // [初版-待校验] 第 2 章 幽暗森林（深绿 + 蓝蘑菇）
     name: "幽暗森林",
     backgroundKey: "ch2-map",
-    bossTexture: "boss-warlock", // [待确认] boss 章节归属，可由后续任务交换
+    bossFrameId: "boss-ch2",
+    bossTexture: "boss-warlock", // 旧版降级
     pathPoints: [
       [-40, 180], [220, 180], [260, 320], [440, 340],
       [460, 200], [640, 180], [680, 360], [1000, 380],
@@ -64,6 +66,7 @@ export const CHAPTER_LAYOUT = [
     // [初版-待校验] 第 3 章 烈焰火山（红黑 + 岩浆）
     name: "烈焰火山",
     backgroundKey: "ch3-map",
+    bossFrameId: "boss-ch3",
     pathPoints: [
       [-40, 180], [260, 200], [280, 360], [520, 360],
       [560, 200], [720, 200], [740, 320], [1000, 280],
@@ -77,6 +80,7 @@ export const CHAPTER_LAYOUT = [
     // [初版-待校验] 第 4 章 极北雪山（白蓝 + 冰堡）
     name: "极北雪山",
     backgroundKey: "ch4-map",
+    bossFrameId: "boss-ch4",
     pathPoints: [
       [-40, 200], [240, 220], [380, 320], [560, 320],
       [700, 220], [1000, 200],
@@ -90,7 +94,8 @@ export const CHAPTER_LAYOUT = [
     // [初版-待校验] 第 5 章 回响之渊（紫色水晶）
     name: "回响之渊",
     backgroundKey: "ch5-map",
-    bossTexture: "boss-wraith", // [待确认] boss 章节归属，可由后续任务交换
+    bossFrameId: "boss-ch5",
+    bossTexture: "boss-wraith", // 旧版降级
     pathPoints: [
       [-40, 320], [180, 280], [200, 420], [440, 440],
       [480, 240], [680, 240], [720, 380], [1000, 200],

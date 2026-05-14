@@ -27,6 +27,7 @@ import {
 } from "../data/map.js";
 import { SPECIAL_TOWER_KEYS, TOWER_BUTTON_ORDER, TOWER_TYPES } from "../data/towers.js";
 import { createGameTextures } from "../render/textures.js";
+import { loadAllNewAssets } from "../data/assetManifest.js";
 import { cloneStats, pickRandom } from "../utils/random.js";
 
 const HERO_OUTPOST_OFFSET = 24;
@@ -95,6 +96,27 @@ const TOWER_STATE_ASSETS = {
     branches: {
       inferno: new URL("../assets/towers/flame-branch-inferno.png", import.meta.url).href,
       wildfire: new URL("../assets/towers/flame-branch-wildfire.png", import.meta.url).href,
+    },
+  },
+  frost: {
+    l1: new URL("../assets/towers/frost-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/frost-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/frost-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/frost-attack.png", import.meta.url).href,
+    branches: {
+      storm: new URL("../assets/towers/frost-branch-storm.png", import.meta.url).href,
+      crystal: new URL("../assets/towers/frost-branch-crystal.png", import.meta.url).href,
+    },
+  },
+  altar: {
+    l1: new URL("../assets/towers/altar-l1.png", import.meta.url).href,
+    l2: new URL("../assets/towers/altar-l2.png", import.meta.url).href,
+    l3: new URL("../assets/towers/altar-l3.png", import.meta.url).href,
+    attack: new URL("../assets/towers/altar-attack.png", import.meta.url).href,
+    branches: {
+      swift: new URL("../assets/towers/altar-branch-swift.png", import.meta.url).href,
+      force: new URL("../assets/towers/altar-branch-force.png", import.meta.url).href,
+      balance: new URL("../assets/towers/altar-branch-balance.png", import.meta.url).href,
     },
   },
 };
@@ -205,6 +227,7 @@ export class GameScene extends Phaser.Scene {
     this.loadHeroAssets();
     this.loadChapterMaps();
     this.loadEnemySheets();
+    loadAllNewAssets(this);
     this.load.image("tower-codex-barracks", "assets/towers/barracks_codex.png");
     this.load.image("tower-codex-flame", "assets/towers/flame_codex.png");
     this.load.image("tower-codex-treasure", "assets/towers/treasure_codex.png");
@@ -326,4 +349,4 @@ export class GameScene extends Phaser.Scene {
     this.hudSystem.showNotice("已开启地图标定模式：点击空白记录坐标", "#2f4972");
   }
 }
-
+

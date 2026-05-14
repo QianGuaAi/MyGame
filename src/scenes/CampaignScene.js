@@ -87,11 +87,15 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   preload() {
+    this.load.on("loaderror", () => {});
     CHAPTERS.forEach((chapter) => {
       if (!this.textures.exists(chapter.mapKey)) {
         this.load.image(chapter.mapKey, chapter.mapUrl);
       }
     });
+    if (!this.textures.exists("menu-bg")) {
+      this.load.image("menu-bg", new URL("../assets/menu/menu-bg.png", import.meta.url).href);
+    }
   }
 
   create() {
@@ -105,7 +109,12 @@ export class CampaignScene extends Phaser.Scene {
   }
 
   drawBackground() {
-    this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2a3626).setOrigin(0);
+    if (this.textures.exists("menu-bg")) {
+      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "menu-bg")
+        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    } else {
+      this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2a3626).setOrigin(0);
+    }
 
     const mapKey = this.chapter?.mapKey;
     if (mapKey && this.textures.exists(mapKey)) {

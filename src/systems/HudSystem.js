@@ -21,7 +21,21 @@ export class HudSystem {
       .setOrigin(0)
       .setStrokeStyle(3, 0x7a4b25, 0.92)
       .setDepth(30);
-    s.hudText = s.add.text(34, 24, "", {
+    const hasCoinIcon = s.textures.exists("icon-coin");
+    const hasHeartIcon = s.textures.exists("icon-heart");
+    if (hasCoinIcon) {
+      s.hudCoinIcon = s.add.image(38, 22, "icon-coin").setDisplaySize(16, 16).setDepth(31);
+    }
+    s.hudGoldText = s.add.text(hasCoinIcon ? 50 : 34, 17, "", {
+      ...TEXT_STYLE, fontSize: "13px", color: "#8b4e10",
+    }).setDepth(31);
+    if (hasHeartIcon) {
+      s.hudHeartIcon = s.add.image(hasCoinIcon ? 106 : 90, 22, "icon-heart").setDisplaySize(14, 14).setDepth(31);
+    }
+    s.hudLivesText = s.add.text(hasHeartIcon ? (hasCoinIcon ? 118 : 102) : (hasCoinIcon ? 86 : 90), 17, "", {
+      ...TEXT_STYLE, fontSize: "13px", color: "#b52a2a",
+    }).setDepth(31);
+    s.hudText = s.add.text(hasCoinIcon ? 168 : 150, 17, "", {
       ...TEXT_STYLE,
       fontSize: "13px",
       color: "#352415",
@@ -403,26 +417,61 @@ export class HudSystem {
 
   openEnemyCodex() {
     const s = this.scene;
-    this.createModalBase("敌人图鉴", "选择一类查看完整设定图。");
-    const normalButton = this.createButton(280, 200, 200, 44, "普通小怪", () => {
-      this.closeModal();
-      this.showCodexImage("enemy-codex", "敌人图鉴 · 普通小怪");
-    }, {
-      fill: 0xc9756d,
-      hoverFill: 0xdd8d85,
-      stroke: 0x5c2a25,
-      color: "#fff6d8",
-    }).setDepth(93);
-    const eliteButton = this.createButton(280, 260, 200, 44, "精英小怪", () => {
-      this.closeModal();
-      this.showCodexImage("enemy-elite-codex", "敌人图鉴 · 精英小怪");
-    }, {
-      fill: 0x9c5cc4,
-      hoverFill: 0xb074d8,
-      stroke: 0x4a285c,
-      color: "#fff6d8",
-    }).setDepth(93);
-    s.modalObjects.push(normalButton, eliteButton);
+    const MONSTERS_LIST = [
+      "sprout-01","mushroom-02","boar-03","wisp-04","lizard-05","golem-06",
+      "shadow-07","snow-08","sprout-09","mushroom-10","boar-11","wisp-12",
+      "lizard-13","golem-14","shadow-15","snow-16","sprout-17","mushroom-18",
+      "boar-19","wisp-20","lizard-21","golem-22","shadow-23","snow-24",
+      "sprout-25","mushroom-26","boar-27","wisp-28","lizard-29","golem-30",
+    ];
+    const hasPortraits = MONSTERS_LIST.some((id) => s.textures.exists(`portrait-${id}`));
+    if (!hasPortraits) {
+      this.createModalBase("敌人图鉴", "选择一类查看完整设定图。");
+      const normalButton = this.createButton(280, 200, 200, 44, "普通小怪", () => {
+        this.closeModal();
+        this.showCodexImage("enemy-codex", "敌人图鉴 · 普通小怪");
+      }, { fill: 0xc9756d, hoverFill: 0xdd8d85, stroke: 0x5c2a25, color: "#fff6d8" }).setDepth(93);
+      const eliteButton = this.createButton(280, 260, 200, 44, "精英小怪", () => {
+        this.closeModal();
+        this.showCodexImage("enemy-elite-codex", "敌人图鉴 · 精英小怪");
+      }, { fill: 0x9c5cc4, hoverFill: 0xb074d8, stroke: 0x4a285c, color: "#fff6d8" }).setDepth(93);
+      s.modalObjects.push(normalButton, eliteButton);
+      this.addModalCloseButton("关闭", () => this.closeModal());
+      return;
+    }
+
+    this.createModalBase("敌人图鉴", "共 30 种怪物——点击查看大图。");
+    const cols = 6;
+    const cellW = 64;
+    const cellH = 72;
+    const startX = GAME_WIDTH / 2 - (cols * cellW) / 2 + cellW / 2;
+    const startY = 130;
+    MONSTERS_LIST.forEach((monsterId, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = startX + col * cellW;
+      const y = startY + row * cellH;
+      const portraitKey = `portrait-${monsterId}`;
+      const bg = s.add.rectangle(x, y, cellW - 4, cellH - 4, 0xf0deb0, 0.88)
+        .setStrokeStyle(1, 0x8a5a26, 0.7).setDepth(91);
+      s.modalObjects.push(bg);
+      if (s.textures.exists(portraitKey)) {
+        const img = s.add.image(x, y - 6, portraitKey)
+          .setDisplaySize(cellW - 10, cellH - 20).setDepth(92)
+          .setInteractive({ useHandCursor: true })
+          .on("pointerdown", () => {
+            this.closeModal();
+            this.showCodexImage(portraitKey, `怪物图鉴 · ${monsterId}`);
+          });
+        s.modalObjects.push(img);
+      }
+      const label = s.add.text(x, y + cellH / 2 - 12, monsterId.replace(/-\d+$/, ""), {
+        fontFamily: "Inter, system-ui, sans-serif",
+        fontSize: "9px",
+        color: "#3a2816",
+      }).setOrigin(0.5).setDepth(92);
+      s.modalObjects.push(label);
+    });
     this.addModalCloseButton("关闭", () => this.closeModal());
   }
 
@@ -442,17 +491,22 @@ export class HudSystem {
     this.addModalCloseButton("关闭", () => this.closeModal());
   }
 
-  openBossCodex(selectedKey = "boss-wraith-sheet") {
+  openBossCodex(selectedKey = null) {
     const s = this.scene;
-    const entries = [
+    const chapterNames = ["边境魔王", "森林领主", "火山巨兽", "雪山执政", "深渊守卫"];
+    const newEntries = [1, 2, 3, 4, 5]
+      .map((n) => ({ key: `enemy-boss-ch${n}-portrait`, label: chapterNames[n - 1] ?? `Boss ${n}` }))
+      .filter((item) => s.textures.exists(item.key));
+    const legacyEntries = [
       { key: "boss-wraith-sheet", label: "奥术幽灵" },
       { key: "boss-warlock-sheet", label: "暗月术士" },
     ].filter((item) => s.textures.exists(item.key));
+    const entries = newEntries.length > 0 ? newEntries : legacyEntries;
     if (entries.length === 0) {
       this.showNotice("暂无 Boss 图鉴", "#7a4b25");
       return;
     }
-    const activeKey = entries.some((item) => item.key === selectedKey) ? selectedKey : entries[0].key;
+    const activeKey = selectedKey && entries.some((item) => item.key === selectedKey) ? selectedKey : entries[0].key;
     this.createModalBase("Boss 图鉴", "选择 Boss 查看整图。");
     entries.forEach((item, index) => {
       const button = this.createButton(250 + index * 190, 170, 170, 36, item.label, () => this.openBossCodex(item.key), {
@@ -619,8 +673,10 @@ export class HudSystem {
     const remainingEnemies = this.getRemainingEnemiesInWave();
     const waveLabel = s.wave > 0 ? `${s.wave}/${s.totalWaves}` : `0/${s.totalWaves}`;
     const heroHp = s.heroes.map((hero) => `${hero.name.slice(1)} ${Math.ceil(hero.hp)}/${hero.stats.maxHp}`).join("  ");
+    if (s.hudGoldText) s.hudGoldText.setText(`${s.gold}`);
+    if (s.hudLivesText) s.hudLivesText.setText(`${Math.max(s.lives, 0)}`);
     s.hudText.setText(
-      `金币 ${s.gold}  生命 ${Math.max(s.lives, 0)}  第 ${waveLabel} 波  敌人 ${remainingEnemies}  背包 ${s.inventory.length}  碎片 ${s.blueprintFragments}/3  得分 ${s.score}\n${heroHp}`,
+      `第 ${waveLabel} 波  敌人 ${remainingEnemies}  碎片 ${s.blueprintFragments}/3  得分 ${s.score}\n${heroHp}`,
     );
 
     if (s.wave >= s.totalWaves && !s.waveActive) {
