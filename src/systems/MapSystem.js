@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GAME_HEIGHT, GAME_WIDTH, PANEL_X, TEXT_STYLE, buildPathSegments } from "../data/map.js";
+import { GAME_HEIGHT, GAME_WIDTH, PANEL_X, buildPathSegments } from "../data/map.js";
 import { STORAGE_KEYS } from "../utils/storage.js";
 import { EASTER_EGGS } from "../data/easterEggs.js";
 
@@ -84,7 +84,6 @@ export class MapSystem {
       s.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x2c2118).setOrigin(0).setDepth(0);
     }
     s.mapObstacles = [];
-    this.drawBaseAndEntry();
   }
 
   drawTerrainPatches() {
@@ -230,47 +229,6 @@ export class MapSystem {
     graphics.strokePath();
     graphics.fillStyle(color, alpha);
     s.pathPoints.forEach(([x, y]) => graphics.fillCircle(x, y, width / 2));
-  }
-
-  drawBaseAndEntry() {
-    const s = this.scene;
-    const primaryLane = this.getSpawnLane(0);
-    const endPoint = primaryLane.points[primaryLane.points.length - 1];
-    const starts = (s.spawnLanes ?? [primaryLane]).map((lane) => lane.points[0]);
-    const baseX = endPoint[0] - 22;
-    const baseY = endPoint[1];
-
-    s.add.circle(baseX, baseY, 28, 0xffcf45, 1)
-      .setStrokeStyle(5, 0x7a4b25, 0.9)
-      .setDepth(4);
-    s.add.circle(baseX, baseY, 18, 0xf7d76e, 0.86)
-      .setDepth(4.1);
-    starts.forEach(([sx, sy]) => {
-      const entryX = Phaser.Math.Clamp(
-        sx < 0 ? sx + 22 : sx > GAME_WIDTH ? sx - 22 : sx,
-        20,
-        GAME_WIDTH - 20,
-      );
-      const entryY = Phaser.Math.Clamp(
-        sy < 0 ? sy + 22 : sy > GAME_HEIGHT ? sy - 22 : sy,
-        20,
-        GAME_HEIGHT - 20,
-      );
-      s.add.circle(entryX, entryY, 24, 0xffcf45, 1)
-        .setStrokeStyle(4, 0x7a4b25, 0.9)
-        .setDepth(4);
-      s.add.circle(entryX, entryY, 15, 0xf7d76e, 0.86)
-        .setDepth(4.1);
-    });
-    s.add.rectangle(baseX + 4, baseY, 34, 82, 0x8b5a2b, 1).setStrokeStyle(4, 0x593516, 1).setDepth(4.2);
-    s.add.rectangle(baseX + 4, baseY - 26, 48, 24, 0xb43b2f, 1).setStrokeStyle(3, 0x5d2b22, 1).setDepth(4.3);
-    s.add.rectangle(baseX + 4, baseY + 8, 18, 50, 0x4f2f18, 1).setDepth(4.4);
-    s.add.circle(baseX, baseY + 26, 2, 0xf6d37a, 1).setDepth(4.5);
-    s.add.text(baseX - 26, baseY - 52, "前哨", {
-      ...TEXT_STYLE,
-      fontSize: "16px",
-      color: "#4b2c13",
-    }).setDepth(3);
   }
 
   placeDecorations() {

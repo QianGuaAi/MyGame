@@ -16,6 +16,10 @@ export class EnemySystem {
   }
 
   ensureMonsterFrame(monster) {
+    if (monster?.useFrames) {
+      return this.scene.textures.exists(monster.walkKey(1)) ? monster.walkKey(1) : null;
+    }
+
     const tex = this.scene.textures.get(monster.sheetKey);
     if (!tex || tex.key === "__MISSING") {
       return null;

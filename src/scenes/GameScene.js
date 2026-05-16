@@ -126,7 +126,7 @@ const HERO_ACTION_FRAME_COUNTS = {
     run: 5,
     attack: 4,
     cast: 4,
-    ultimate: 3,
+    ultimate: 4,
     defeated: 4,
   },
   ergou: {
@@ -134,7 +134,7 @@ const HERO_ACTION_FRAME_COUNTS = {
     run: 4,
     attack: 4,
     cast: 4,
-    ultimate: 3,
+    ultimate: 4,
     defeated: 4,
   },
   yueguang: {
@@ -142,7 +142,7 @@ const HERO_ACTION_FRAME_COUNTS = {
     run: 4,
     attack: 4,
     cast: 4,
-    ultimate: 3,
+    ultimate: 4,
     defeated: 4,
   },
 };
@@ -306,9 +306,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   loadHeroAssets() {
-    this.load.image("hero-tiezhu", new URL("../assets/heroes/tiezhu.png", import.meta.url).href);
-    this.load.image("hero-ergou", new URL("../assets/heroes/ergou.png", import.meta.url).href);
-    this.load.image("hero-yueguang", new URL("../assets/heroes/yueguang.png", import.meta.url).href);
+    this.load.image("hero-tiezhu", new URL("../assets/heroes/action-sheets/tiezhu-walk-01.png", import.meta.url).href);
+    this.load.image("hero-ergou", new URL("../assets/heroes/action-sheets/ergou-walk-01.png", import.meta.url).href);
+    this.load.image("hero-yueguang", new URL("../assets/heroes/action-sheets/yueguang-walk-01.png", import.meta.url).href);
     Object.entries(HERO_ACTION_FRAME_COUNTS).forEach(([heroId, actions]) => {
       Object.entries(actions).forEach(([action, frameCount]) => {
         for (let index = 1; index <= frameCount; index += 1) {

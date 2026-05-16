@@ -13,9 +13,9 @@ const HERO_TEXTURE_SIZE = 46;
 const HERO_ACTION_FRAME_MS = 120;
 const HERO_RUN_SPEED_THRESHOLD = 105;
 const HERO_ACTION_FRAME_COUNTS = {
-  tiezhu:   { walk: 5, run: 5, attack: 4, cast: 4, ultimate: 3, defeated: 4 },
-  ergou:    { walk: 4, run: 4, attack: 4, cast: 4, ultimate: 3, defeated: 4 },
-  yueguang: { walk: 4, run: 4, attack: 4, cast: 4, ultimate: 3, defeated: 4 },
+  tiezhu:   { walk: 5, run: 5, attack: 4, cast: 4, ultimate: 4, defeated: 4 },
+  ergou:    { walk: 4, run: 4, attack: 4, cast: 4, ultimate: 4, defeated: 4 },
+  yueguang: { walk: 4, run: 4, attack: 4, cast: 4, ultimate: 4, defeated: 4 },
 };
 
 /**
